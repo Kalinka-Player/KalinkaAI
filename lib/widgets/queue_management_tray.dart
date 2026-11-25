@@ -8,6 +8,7 @@ import '../providers/kalinka_ws_api_provider.dart';
 import '../providers/queue_features_provider.dart';
 import '../theme/app_theme.dart';
 import 'kalinka_bottom_sheet.dart';
+import 'keep_playing.dart';
 import 'tap_highlight.dart';
 
 /// Actions that can be returned from the queue management tray.
@@ -52,6 +53,8 @@ class QueueManagementTrayContent extends ConsumerWidget {
     final isRepeatAll = playbackMode.repeatAll;
     final isRepeatOne = playbackMode.repeatSingle;
     final isShuffle = playbackMode.shuffle;
+    final similar = ref.watch(similarTracksAvailableProvider);
+    final keepPlaying = ref.watch(keepPlayingProvider);
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -68,9 +71,10 @@ class QueueManagementTrayContent extends ConsumerWidget {
           sublabel: isShuffle
               ? 'On \u2014 playing in random order'
               : 'Off \u2014 plays in order',
-          trailing: _buildToggleSwitch(
+          trailing: _ToggleSwitch(
+            label: 'Shuffle',
             value: isShuffle,
-            activeColor: KalinkaColors.accent,
+            autofocus: true,
             onTap: () => ref
                 .read(kalinkaWsApiProvider)
                 .sendQueueCommand(
@@ -116,7 +120,7 @@ class QueueManagementTrayContent extends ConsumerWidget {
                 },
         ),
 
-        if (ref.watch(similarTracksAvailableProvider)) ...[
+        if (similar) ...[
           const SizedBox(height: 8),
           SheetRow(
             icon: Icons.auto_awesome_outlined,
@@ -126,6 +130,10 @@ class QueueManagementTrayContent extends ConsumerWidget {
             sublabel: 'Queue tracks like the one playing to follow it',
             onTap: () => _emitAction(context, TrayAction.addSimilar),
           ),
+        ],
+        if (keepPlaying != null) ...[
+          if (similar) const SheetDivider() else const SizedBox(height: 8),
+          _KeepPlayingRow(on: keepPlaying),
         ],
 
         const SizedBox(height: 8),
@@ -157,18 +165,70 @@ class QueueManagementTrayContent extends ConsumerWidget {
       ],
     );
   }
+}
 
-  Widget _buildToggleSwitch({
-    required bool value,
-    required Color activeColor,
-    required VoidCallback onTap,
-  }) {
+/// The server's Keep playing, switched in place. A tap while the last switch
+/// is answered does nothing, so one tap saves once; the switch keeps its focus
+/// meanwhile.
+class _KeepPlayingRow extends ConsumerStatefulWidget {
+  final bool on;
+
+  const _KeepPlayingRow({required this.on});
+
+  @override
+  ConsumerState<_KeepPlayingRow> createState() => _KeepPlayingRowState();
+}
+
+class _KeepPlayingRowState extends ConsumerState<_KeepPlayingRow> {
+  bool _switching = false;
+
+  Future<void> _switch() async {
+    if (_switching) return;
+    setState(() => _switching = true);
+    await switchKeepPlaying(ref, !widget.on);
+    if (mounted) setState(() => _switching = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SheetRow(
+      icon: Icons.all_inclusive_rounded,
+      iconBackground: KalinkaColors.surfaceOverlay,
+      iconColor: KalinkaColors.textSecondary,
+      label: 'Keep playing',
+      sublabel: widget.on
+          ? 'On \u2014 adds tracks like these at the end'
+          : 'Off \u2014 stops after the last track',
+      trailing: _ToggleSwitch(
+        label: 'Keep playing',
+        value: widget.on,
+        onTap: _switch,
+      ),
+    );
+  }
+}
+
+class _ToggleSwitch extends StatelessWidget {
+  final String label;
+  final bool value;
+  final bool autofocus;
+  final VoidCallback onTap;
+
+  const _ToggleSwitch({
+    required this.label,
+    required this.value,
+    required this.onTap,
+    this.autofocus = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
     return Semantics(
-      label: 'Shuffle',
+      label: label,
       toggled: value,
       child: TapHighlight(
         focusable: true,
-        autofocus: true,
+        autofocus: autofocus,
         onTap: onTap,
         borderRadius: BorderRadius.circular(12),
         child: AnimatedContainer(
@@ -178,7 +238,7 @@ class QueueManagementTrayContent extends ConsumerWidget {
           height: 24,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(12),
-            color: value ? activeColor : KalinkaColors.surfaceElevated,
+            color: value ? KalinkaColors.accent : KalinkaColors.surfaceElevated,
             border: value
                 ? null
                 : Border.all(color: KalinkaColors.borderDefault),

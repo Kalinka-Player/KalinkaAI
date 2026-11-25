@@ -15,6 +15,7 @@ import '../utils/playback_utils.dart';
 import '../utils/web_build_target.dart';
 import 'away.dart';
 import 'column_separator.dart';
+import 'keep_playing.dart';
 import 'procedural_album_art.dart';
 import 'queue_columns.dart';
 import 'tap_highlight.dart';
@@ -22,16 +23,6 @@ import 'tap_highlight.dart';
 const _horizontalInset = 12.0;
 const _artworkSize = 40.0;
 const _artworkGap = 10.0;
-
-// These are navigation/playback shortcuts, so interaction stays neutral.
-// Keep keyboard focus visible as well as pointer hover and press.
-final _previewOverlay = WidgetStateProperty.resolveWith<Color?>((states) {
-  if (states.contains(WidgetState.disabled)) return Colors.transparent;
-  if (states.contains(WidgetState.focused)) {
-    return KalinkaColors.surfaceOverlay;
-  }
-  return kalinkaOverlay.resolve(states) ?? Colors.transparent;
-});
 
 /// Uses the space remaining after the player's measured artwork and controls.
 /// Scrolling cannot reveal extra rows: capacity is based on the full viewport
@@ -143,16 +134,7 @@ class SliverUpNextPreview extends ConsumerWidget {
                       handle: false,
                     ),
                   if (total == 0)
-                    SizedBox(
-                      height: rowHeight,
-                      child: Center(
-                        child: Text(
-                          'Queue is empty',
-                          style: KalinkaTextStyles.queueItemArtist,
-                          textAlign: TextAlign.center,
-                        ),
-                      ),
-                    ),
+                    SizedBox(height: rowHeight, child: const EmptyUpNext()),
                   for (var i = 0; i < count; i++)
                     SizedBox(
                       height: rowHeight,
@@ -230,7 +212,7 @@ class _UpNextHeading extends ConsumerWidget {
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(8),
               ),
-            ).copyWith(overlayColor: _previewOverlay),
+            ).copyWith(overlayColor: kalinkaRowOverlay),
             child: ExcludeSemantics(child: heading),
           ),
         ),
@@ -299,7 +281,7 @@ class _UpcomingTrack extends ConsumerWidget {
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(8),
               ),
-            ).copyWith(overlayColor: _previewOverlay),
+            ).copyWith(overlayColor: kalinkaRowOverlay),
             child: ExcludeSemantics(
               child: Row(
                 children: [

@@ -1826,7 +1826,7 @@ abstract final class ModuleCapability {
   static const catalogs = 'catalogs';
 
   /// The source suggests tracks to follow one of its own, which the server's
-  /// "similar tracks" and autoplay ask it for.
+  /// "similar tracks" and Keep playing ask it for.
   static const continuation = 'continuation';
 }
 

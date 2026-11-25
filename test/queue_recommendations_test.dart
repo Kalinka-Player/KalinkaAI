@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -10,25 +13,39 @@ import 'package:kalinka/providers/app_state_provider.dart';
 import 'package:kalinka/providers/connection_settings_provider.dart';
 import 'package:kalinka/providers/connection_state_provider.dart';
 import 'package:kalinka/providers/kalinka_player_api_provider.dart';
+import 'package:kalinka/providers/playback_time_provider.dart';
 import 'package:kalinka/providers/queue_features_provider.dart';
 import 'package:kalinka/providers/server_refusal.dart';
 import 'package:kalinka/providers/source_modules_provider.dart';
 import 'package:kalinka/providers/toast_provider.dart';
+import 'package:kalinka/providers/url_resolver.dart';
 import 'package:kalinka/widgets/queue_actions.dart';
 import 'package:kalinka/widgets/queue_management_tray.dart';
+import 'package:kalinka/widgets/queue_zone.dart';
+import 'package:kalinka/widgets/up_next_preview.dart';
 
 import 'support/home_shell.dart';
 import 'support/queue_server.dart';
 
-/// Says what `/server/version` would, and how many similar tracks came.
+/// Says what `/server/version` would, how many similar tracks came, and how
+/// many turning Keep playing on added, or holds that answer for [held].
 class _QueueApi implements KalinkaPlayerProxy {
-  _QueueApi({this.version = const {}, this.similar = 0, this.refusal});
+  _QueueApi({
+    this.version = const {},
+    this.similar = 0,
+    this.kept = 0,
+    this.refusal,
+    this.held,
+  });
 
   final Map<String, dynamic> version;
   final int similar;
+  final int kept;
   final Exception? refusal;
+  final Completer<int>? held;
   int versionAsked = 0;
   int similarAsked = 0;
+  final List<bool> keepPlayingSet = [];
 
   @override
   Future<Map<String, dynamic>> getServerVersion() async {
@@ -44,29 +61,49 @@ class _QueueApi implements KalinkaPlayerProxy {
   }
 
   @override
+  Future<int> setKeepPlaying(bool enabled) async {
+    keepPlayingSet.add(enabled);
+    if (refusal != null) throw refusal!;
+    return held?.future ?? (enabled ? kept : 0);
+  }
+
+  @override
   dynamic noSuchMethod(Invocation invocation) =>
       throw UnimplementedError('${invocation.memberName}');
 }
 
 const _queueBlock = {
   'server_version': '9.9.9',
-  'queue': {'autoplay': true, 'similar': true, 'dislike': true},
+  'queue': {'keep_playing': false, 'similar': true, 'dislike': true},
 };
 
-class _Queue extends PlayQueueStateStore {
-  _Queue(this.source);
+/// A track from each of [sources] in turn, the one at [index] in [state].
+PlayQueueState _queueFrom(
+  List<String> sources, {
+  int index = 0,
+  PlayerStateType state = PlayerStateType.playing,
+  bool? keepPlaying,
+}) => PlayQueueState(
+  playbackState: PlaybackState(index: index, state: state),
+  trackList: [
+    for (final (i, source) in sources.indexed)
+      Track(id: 'kalinka:$source:track:t$i', title: 'Night drive', duration: 1),
+  ],
+  playbackMode: PlaybackMode.empty,
+  seq: 1,
+  keepPlaying: keepPlaying,
+);
 
-  final String source;
+/// Two tracks, the last one playing, with Keep playing off.
+final _runOut = _queueFrom(
+  ['localfiles', 'localfiles'],
+  index: 1,
+  keepPlaying: false,
+);
 
+class _StillClock extends PlaybackTimeMsNotifier {
   @override
-  PlayQueueState build() => PlayQueueState(
-    playbackState: PlaybackState(index: 0, state: PlayerStateType.playing),
-    trackList: [
-      Track(id: 'kalinka:$source:track:t0', title: 'Night drive', duration: 1),
-    ],
-    playbackMode: PlaybackMode.empty,
-    seq: 1,
-  );
+  int build() => 0;
 }
 
 ModuleInfo _module(String name, {bool continuation = true}) => ModuleInfo(
@@ -75,6 +112,118 @@ ModuleInfo _module(String name, {bool continuation = true}) => ModuleInfo(
   enabled: true,
   state: ModuleState.ready,
   capabilities: [if (continuation) ModuleCapability.continuation],
+);
+
+/// [child] in a connected app whose server is [api] and whose queue is
+/// [queue], with [modules] as its sources (by default a library that
+/// continues) and [more] overrides.
+Future<ProviderContainer> _pump(
+  WidgetTester tester,
+  Widget child, {
+  required _QueueApi api,
+  required PlayQueueState queue,
+  List<ModuleInfo>? modules,
+  List<Override> more = const [],
+}) async {
+  SharedPreferences.setMockInitialValues({});
+  final prefs = await SharedPreferences.getInstance();
+  final container = ProviderContainer(
+    overrides: [
+      sharedPrefsProvider.overrideWithValue(prefs),
+      kalinkaProxyProvider.overrideWithValue(api),
+      connectionStateProvider.overrideWith(SettableConnection.new),
+      playQueueStateStoreProvider.overrideWith(() => SettableQueue(queue)),
+      sourceModulesProvider.overrideWith(
+        (ref) => modules ?? [_module('localfiles')],
+      ),
+      ...more,
+    ],
+  );
+  addTearDown(container.dispose);
+  await tester.pumpWidget(
+    UncontrolledProviderScope(
+      container: container,
+      child: MaterialApp(home: Scaffold(body: child)),
+    ),
+  );
+  return container;
+}
+
+/// The queue menu over [queue], acting on its choices as the app does unless
+/// [onAction] takes them.
+Future<ProviderContainer> _pumpTray(
+  WidgetTester tester, {
+  Map<String, dynamic> version = _queueBlock,
+  PlayQueueState? queue,
+  List<ModuleInfo>? modules,
+  ValueChanged<TrayAction>? onAction,
+  _QueueApi? api,
+}) async {
+  final container = await _pump(
+    tester,
+    SingleChildScrollView(
+      child: Consumer(
+        builder: (context, ref, _) => QueueManagementTrayContent(
+          onAction:
+              onAction ?? (action) => runQueueTrayAction(context, ref, action),
+        ),
+      ),
+    ),
+    api: api ?? _QueueApi(version: version),
+    queue: queue ?? _queueFrom(['localfiles']),
+    modules: modules,
+  );
+  await tester.pumpAndSettle();
+  return container;
+}
+
+/// Where Up next comes to an end: under Now Playing, and in the queue.
+enum _UpNext { nowPlaying, queue }
+
+/// [place] over [queue].
+Future<ProviderContainer> _pumpUpNext(
+  WidgetTester tester,
+  _UpNext place, {
+  required PlayQueueState queue,
+  List<ModuleInfo>? modules,
+  _QueueApi? api,
+}) async {
+  final container = await _pump(
+    tester,
+    SizedBox(
+      width: 400,
+      height: 700,
+      child: switch (place) {
+        _UpNext.nowPlaying => const CustomScrollView(
+          slivers: [
+            SliverUpNextPreview(canOpenQueue: false, fitToSpace: false),
+          ],
+        ),
+        _UpNext.queue => const QueueZone(),
+      },
+    ),
+    api: api ?? _QueueApi(),
+    queue: queue,
+    modules: modules,
+    more: [
+      playbackTimeMsProvider.overrideWith(_StillClock.new),
+      sourceCountProvider.overrideWithValue(1),
+      urlResolverProvider.overrideWithValue(UrlResolver('')),
+    ],
+  );
+  await tester.pump();
+  return container;
+}
+
+void _setQueue(ProviderContainer container, PlayQueueState queue) =>
+    (container.read(playQueueStateStoreProvider.notifier) as SettableQueue).set(
+      queue,
+    );
+
+ServerRefusalException _demoRefusal() => ServerRefusalException(
+  DioException(requestOptions: RequestOptions()),
+  'demo_read_only',
+  'This is a read-only demo server.',
 );
 
 void main() {
@@ -200,63 +349,13 @@ void main() {
   });
 
   group('Add similar tracks', () {
-    late SharedPreferences prefs;
-    setUp(() async {
-      SharedPreferences.setMockInitialValues({});
-      prefs = await SharedPreferences.getInstance();
-    });
-
-    Future<ProviderContainer> pumpTray(
-      WidgetTester tester, {
-      required Map<String, dynamic> version,
-      String playing = 'localfiles',
-      List<ModuleInfo>? modules,
-      ValueChanged<TrayAction>? onAction,
-      _QueueApi? api,
-    }) async {
-      final container = ProviderContainer(
-        overrides: [
-          sharedPrefsProvider.overrideWithValue(prefs),
-          kalinkaProxyProvider.overrideWithValue(
-            api ?? _QueueApi(version: version),
-          ),
-          connectionStateProvider.overrideWith(SettableConnection.new),
-          playQueueStateStoreProvider.overrideWith(() => _Queue(playing)),
-          sourceModulesProvider.overrideWith(
-            (ref) => modules ?? [_module('localfiles')],
-          ),
-        ],
-      );
-      addTearDown(container.dispose);
-      await tester.pumpWidget(
-        UncontrolledProviderScope(
-          container: container,
-          child: MaterialApp(
-            home: Scaffold(
-              body: SingleChildScrollView(
-                child: Consumer(
-                  builder: (context, ref, _) => QueueManagementTrayContent(
-                    onAction:
-                        onAction ??
-                        (action) => runQueueTrayAction(context, ref, action),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-      return container;
-    }
-
     final row = find.text('Add similar tracks');
 
     testWidgets('is offered where the playing track\'s source continues', (
       tester,
     ) async {
       TrayAction? taken;
-      await pumpTray(
+      await _pumpTray(
         tester,
         version: _queueBlock,
         onAction: (action) => taken = action,
@@ -271,12 +370,12 @@ void main() {
     testWidgets('is not offered by a server without the queue block', (
       tester,
     ) async {
-      await pumpTray(tester, version: const {'server_version': '5.0.0'});
+      await _pumpTray(tester, version: const {'server_version': '5.0.0'});
       expect(row, findsNothing);
     });
 
     testWidgets('is not offered where the server turns it off', (tester) async {
-      await pumpTray(
+      await _pumpTray(
         tester,
         version: const {
           'queue': {'similar': false, 'dislike': true},
@@ -288,10 +387,10 @@ void main() {
     testWidgets('is not offered for a source that suggests nothing', (
       tester,
     ) async {
-      await pumpTray(
+      await _pumpTray(
         tester,
         version: _queueBlock,
-        playing: 'radio',
+        queue: _queueFrom(['radio']),
         modules: [_module('localfiles'), _module('radio', continuation: false)],
       );
       expect(row, findsNothing);
@@ -304,7 +403,7 @@ void main() {
     ]) {
       testWidgets('says what came: $said', (tester) async {
         final api = _QueueApi(version: _queueBlock, similar: added);
-        final container = await pumpTray(
+        final container = await _pumpTray(
           tester,
           version: _queueBlock,
           api: api,
@@ -334,7 +433,7 @@ void main() {
     ]) {
       testWidgets('a failure is said as an error: $said', (tester) async {
         final api = _QueueApi(version: _queueBlock, refusal: failure);
-        final container = await pumpTray(
+        final container = await _pumpTray(
           tester,
           version: _queueBlock,
           api: api,
@@ -349,5 +448,461 @@ void main() {
         await tester.pump(const Duration(seconds: 30));
       });
     }
+  });
+  group('the Keep playing route', () {
+    test('saves the setting and says how many tracks came', () async {
+      for (final (enabled, added) in [(true, 4), (true, 0), (false, 0)]) {
+        final server = QueueServer(200, {
+          'enabled': enabled,
+          'count': added,
+        }, route: '/queue/keep_playing');
+
+        expect(await server.api().setKeepPlaying(enabled), added);
+        expect(server.requests, ['PUT /queue/keep_playing']);
+        expect(server.bodies['PUT /queue/keep_playing'], {'enabled': enabled});
+      }
+    });
+
+    test('a demo server\'s refusal is told in its words', () async {
+      final server = QueueServer(403, {
+        'detail': {'code': 'demo_read_only', 'message': 'Not in the demo.'},
+      }, route: '/queue/keep_playing');
+
+      await expectLater(
+        server.api().setKeepPlaying(true),
+        throwsA(
+          isA<ServerRefusalException>().having(
+            (e) => '$e',
+            'text',
+            'Not in the demo.',
+          ),
+        ),
+      );
+    });
+
+    test('a server without the route fails it', () async {
+      final server = QueueServer(404, {
+        'detail': 'Not Found',
+      }, route: '/queue/keep_playing');
+
+      await expectLater(
+        server.api().setKeepPlaying(true),
+        throwsA(
+          isA<DioException>().having(
+            (e) => e is ServerRefusalException,
+            'a refusal',
+            isFalse,
+          ),
+        ),
+      );
+    });
+  });
+
+  group('what turning Keep playing on would do', () {
+    Future<bool> offered(
+      PlayQueueState queue, {
+      List<ModuleInfo>? modules,
+    }) async {
+      final container = ProviderContainer(
+        overrides: [
+          playQueueStateStoreProvider.overrideWith(() => SettableQueue(queue)),
+          sourceModulesProvider.overrideWith(
+            (ref) => modules ?? [_module('localfiles')],
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+      await container.read(sourceModulesProvider.future);
+      return container.read(keepPlayingOfferedProvider);
+    }
+
+    test(
+      'the queue at its last track, playing or played out, goes on',
+      () async {
+        expect(await offered(_runOut), isTrue);
+        expect(
+          await offered(
+            _queueFrom(
+              ['localfiles', 'localfiles'],
+              index: 1,
+              state: PlayerStateType.stopped,
+              keepPlaying: false,
+            ),
+          ),
+          isTrue,
+        );
+      },
+    );
+
+    test('nothing while tracks still follow', () async {
+      expect(
+        await offered(
+          _queueFrom(['localfiles', 'localfiles'], keepPlaying: false),
+        ),
+        isFalse,
+      );
+    });
+
+    test(
+      'nothing while Keep playing is on, or on a server without it',
+      () async {
+        for (final keepPlaying in [true, null]) {
+          expect(
+            await offered(
+              _queueFrom(
+                ['localfiles', 'localfiles'],
+                index: 1,
+                keepPlaying: keepPlaying,
+              ),
+            ),
+            isFalse,
+          );
+        }
+      },
+    );
+
+    test('one queued source that continues is enough', () async {
+      final mixed = _queueFrom(
+        ['localfiles', 'radio'],
+        index: 1,
+        keepPlaying: false,
+      );
+      expect(
+        await offered(
+          mixed,
+          modules: [
+            _module('localfiles'),
+            _module('radio', continuation: false),
+          ],
+        ),
+        isTrue,
+      );
+      expect(
+        await offered(
+          mixed,
+          modules: [
+            _module('localfiles', continuation: false),
+            _module('radio', continuation: false),
+          ],
+        ),
+        isFalse,
+      );
+    });
+
+    test('nothing for an empty queue', () async {
+      expect(await offered(_queueFrom([], keepPlaying: false)), isFalse);
+    });
+  });
+
+  group('the Keep playing switch', () {
+    final label = find.text('Keep playing');
+    Finder switchedOn(bool on) => find.byWidgetPredicate(
+      (widget) =>
+          widget is Semantics &&
+          widget.properties.label == 'Keep playing' &&
+          widget.properties.toggled == on,
+    );
+
+    testWidgets('is not there for a server without the setting', (
+      tester,
+    ) async {
+      await _pumpTray(tester);
+      expect(label, findsNothing);
+    });
+
+    testWidgets('shows the server\'s setting and follows it', (tester) async {
+      final container = await _pumpTray(
+        tester,
+        queue: _queueFrom(['localfiles'], keepPlaying: true),
+      );
+      expect(switchedOn(true), findsOneWidget);
+      expect(
+        find.text('On \u2014 adds tracks like these at the end'),
+        findsOneWidget,
+      );
+
+      _setQueue(container, _queueFrom(['localfiles'], keepPlaying: false));
+      await tester.pumpAndSettle();
+      expect(switchedOn(false), findsOneWidget);
+      expect(
+        find.text('Off \u2014 stops after the last track'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('is there where similar tracks are not', (tester) async {
+      await _pumpTray(
+        tester,
+        version: const {'server_version': '5.0.0'},
+        queue: _queueFrom(['localfiles'], keepPlaying: false),
+      );
+      expect(find.text('Add similar tracks'), findsNothing);
+      expect(switchedOn(false), findsOneWidget);
+    });
+
+    for (final on in [true, false]) {
+      testWidgets(
+        'turns it ${on ? 'off' : 'on'}, saying nothing where no tracks came',
+        (tester) async {
+          final api = _QueueApi(version: _queueBlock);
+          final container = await _pumpTray(
+            tester,
+            api: api,
+            queue: _queueFrom(['localfiles', 'localfiles'], keepPlaying: on),
+          );
+
+          await tester.tap(switchedOn(on));
+          await tester.pump();
+
+          expect(api.keepPlayingSet, [!on]);
+          expect(container.read(toastProvider), isEmpty);
+        },
+      );
+    }
+
+    for (final (added, said) in [
+      (3, 'Keep playing added 3 tracks'),
+      (1, 'Keep playing added 1 track'),
+      (0, 'No tracks to recommend'),
+    ]) {
+      testWidgets('turned on where the queue ran out, says what came: $said', (
+        tester,
+      ) async {
+        final api = _QueueApi(version: _queueBlock, kept: added);
+        final container = await _pumpTray(tester, api: api, queue: _runOut);
+
+        await tester.tap(switchedOn(false));
+        await tester.pump();
+
+        expect(api.keepPlayingSet, [true]);
+        final toast = container.read(toastProvider).single;
+        expect(toast.message, said);
+        expect(toast.isError, isFalse);
+        await tester.pump(const Duration(seconds: 30));
+      });
+    }
+
+    testWidgets('a tap while the last is answered saves nothing more', (
+      tester,
+    ) async {
+      final held = Completer<int>();
+      final api = _QueueApi(version: _queueBlock, held: held);
+      await _pumpTray(tester, api: api, queue: _runOut);
+
+      await tester.tap(switchedOn(false));
+      await tester.pump();
+      await tester.tap(switchedOn(false));
+      await tester.pump();
+      expect(api.keepPlayingSet, [true]);
+
+      held.complete(0);
+      await tester.pump();
+      await tester.tap(switchedOn(false));
+      await tester.pump();
+      expect(api.keepPlayingSet, [true, true]);
+      await tester.pump(const Duration(seconds: 30));
+    });
+
+    testWidgets('a refusal is said in the server\'s words', (tester) async {
+      final api = _QueueApi(version: _queueBlock, refusal: _demoRefusal());
+      final container = await _pumpTray(tester, api: api, queue: _runOut);
+
+      await tester.tap(switchedOn(false));
+      await tester.pump();
+
+      final toast = container.read(toastProvider).single;
+      expect(toast.message, 'This is a read-only demo server.');
+      expect(toast.isError, isTrue);
+      await tester.pump(const Duration(seconds: 30));
+    });
+  });
+
+  group('where the queue has run out', () {
+    final offer = find.text('Keep playing');
+    final empty = find.text('Queue is empty');
+
+    for (final place in _UpNext.values) {
+      testWidgets('${place.name}: offers Keep playing at the last track', (
+        tester,
+      ) async {
+        await _pumpUpNext(tester, place, queue: _runOut);
+
+        expect(offer, findsOneWidget);
+        expect(
+          find.text('Turn on to add tracks like these and play on'),
+          findsOneWidget,
+        );
+        expect(empty, findsNothing);
+      });
+
+      testWidgets('${place.name}: offers it once the queue has played out', (
+        tester,
+      ) async {
+        await _pumpUpNext(
+          tester,
+          place,
+          queue: _queueFrom(
+            ['localfiles', 'localfiles'],
+            index: 1,
+            state: PlayerStateType.stopped,
+            keepPlaying: false,
+          ),
+        );
+
+        expect(offer, findsOneWidget);
+        expect(empty, findsNothing);
+      });
+
+      testWidgets('${place.name}: one tap turns it on once, and plays on', (
+        tester,
+      ) async {
+        final held = Completer<int>();
+        final api = _QueueApi(held: held);
+        final container = await _pumpUpNext(
+          tester,
+          place,
+          queue: _runOut,
+          api: api,
+        );
+
+        await tester.tap(offer);
+        await tester.pump();
+        expect(find.byType(CircularProgressIndicator), findsOneWidget);
+        await tester.tap(offer, warnIfMissed: false);
+        await tester.pump();
+        expect(api.keepPlayingSet, [true]);
+
+        // The server says it is on before it answers; the offer waits for it.
+        _setQueue(
+          container,
+          _queueFrom(['localfiles', 'localfiles'], index: 1, keepPlaying: true),
+        );
+        await tester.pump();
+        expect(offer, findsOneWidget);
+        expect(empty, findsNothing);
+
+        held.complete(2);
+        await tester.pump();
+        final toast = container.read(toastProvider).single;
+        expect(toast.message, 'Keep playing added 2 tracks');
+        expect(toast.isError, isFalse);
+        expect(toast.inPanel, isTrue);
+        expect(offer, findsNothing);
+        expect(api.keepPlayingSet, [true]);
+        await tester.pump(const Duration(seconds: 30));
+      });
+
+      testWidgets('${place.name}: says so where nothing could be recommended', (
+        tester,
+      ) async {
+        final api = _QueueApi();
+        final container = await _pumpUpNext(
+          tester,
+          place,
+          queue: _runOut,
+          api: api,
+        );
+
+        await tester.tap(offer);
+        await tester.pump();
+
+        expect(api.keepPlayingSet, [true]);
+        final toast = container.read(toastProvider).single;
+        expect(toast.message, 'No tracks to recommend');
+        expect(toast.isError, isFalse);
+        await tester.pump(const Duration(seconds: 30));
+      });
+
+      testWidgets('${place.name}: goes once Keep playing is on', (
+        tester,
+      ) async {
+        final container = await _pumpUpNext(tester, place, queue: _runOut);
+        expect(offer, findsOneWidget);
+
+        _setQueue(
+          container,
+          _queueFrom(['localfiles', 'localfiles'], index: 1, keepPlaying: true),
+        );
+        await tester.pump();
+
+        expect(offer, findsNothing);
+        expect(empty, findsOneWidget);
+      });
+
+      for (final (why, queue, modules) in [
+        (
+          'Keep playing is on',
+          _queueFrom(['localfiles', 'localfiles'], index: 1, keepPlaying: true),
+          null,
+        ),
+        (
+          'the server has no Keep playing',
+          _queueFrom(['localfiles', 'localfiles'], index: 1),
+          null,
+        ),
+        (
+          'no queued source continues',
+          _runOut,
+          [_module('localfiles', continuation: false)],
+        ),
+      ]) {
+        testWidgets('${place.name}: the queue is empty where $why', (
+          tester,
+        ) async {
+          final api = _QueueApi();
+          await _pumpUpNext(
+            tester,
+            place,
+            queue: queue,
+            modules: modules,
+            api: api,
+          );
+
+          expect(empty, findsOneWidget);
+          expect(offer, findsNothing);
+          await tester.tap(empty);
+          await tester.pump();
+          expect(api.keepPlayingSet, isEmpty);
+        });
+      }
+    }
+
+    testWidgets('nothing is asked while the server is away', (tester) async {
+      final api = _QueueApi();
+      final container = await _pumpUpNext(
+        tester,
+        _UpNext.nowPlaying,
+        queue: _runOut,
+        api: api,
+      );
+      (container.read(connectionStateProvider.notifier) as SettableConnection)
+          .set(ConnectionStatus.offline);
+      await tester.pump();
+
+      await tester.tap(offer, warnIfMissed: false);
+      await tester.pump();
+
+      expect(api.keepPlayingSet, isEmpty);
+    });
+
+    testWidgets('a refusal is said in the server\'s words', (tester) async {
+      final api = _QueueApi(refusal: _demoRefusal());
+      final container = await _pumpUpNext(
+        tester,
+        _UpNext.nowPlaying,
+        queue: _runOut,
+        api: api,
+      );
+
+      await tester.tap(offer);
+      await tester.pump();
+
+      final toast = container.read(toastProvider).single;
+      expect(toast.message, 'This is a read-only demo server.');
+      expect(toast.isError, isTrue);
+      expect(toast.inPanel, isTrue);
+      expect(offer, findsOneWidget);
+      await tester.pump(const Duration(seconds: 30));
+    });
   });
 }

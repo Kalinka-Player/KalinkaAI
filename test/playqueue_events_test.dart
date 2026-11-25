@@ -14,7 +14,11 @@ const _qobuz = PlaybackControl.exclusive(
   title: 'Qobuz Connect',
 );
 
-Map<String, dynamic> _replayJson({Object? control, Object? modules}) => {
+Map<String, dynamic> _replayJson({
+  Object? control,
+  Object? modules,
+  Map<String, Object?> extra = const {},
+}) => {
   'playback_state': {'state': 'PLAYING'},
   'track_list': [],
   'playback_mode': {
@@ -25,6 +29,7 @@ Map<String, dynamic> _replayJson({Object? control, Object? modules}) => {
   'seq': 1,
   'playback_control': ?control,
   'modules': ?modules,
+  ...extra,
 };
 
 /// As `GET /server/modules` lists them.
@@ -570,6 +575,99 @@ void main() {
             0,
           );
       expect(after.modules, same(paired.modules));
+    });
+  });
+
+  group('Keep playing', () {
+    test('parses keep_playing_changed either way', () {
+      for (final enabled in [true, false]) {
+        final event = PlayQueueEvent.fromJson({
+          'event_type': 'keep_playing_changed',
+          'enabled': enabled,
+          'seq': 4,
+        });
+
+        expect(
+          event,
+          isA<KeepPlayingChangedEvent>()
+              .having((e) => e.enabled, 'enabled', enabled)
+              .having((e) => e.seq, 'seq', 4),
+        );
+      }
+    });
+
+    test('the replay carries the setting; a server without it sends none', () {
+      expect(
+        PlayQueueState.fromJson(_replayJson(extra: {'keep_playing': true}))
+            .keepPlaying,
+        isTrue,
+      );
+      expect(
+        PlayQueueState.fromJson(_replayJson(extra: {'keep_playing': false}))
+            .keepPlaying,
+        isFalse,
+      );
+      expect(
+        PlayQueueState.fromJson(_replayJson(extra: {'keep_playing': null}))
+            .keepPlaying,
+        isNull,
+      );
+      expect(PlayQueueState.fromJson(_replayJson()).keepPlaying, isNull);
+    });
+
+    test('the state follows the replay and each change, and keeps it', () {
+      final replayed = _stateWith(const []).apply(
+        PlayQueueEvent.replayEvent(
+          state: PlayQueueState.fromJson(
+            _replayJson(extra: {'keep_playing': true}),
+          ),
+          serverTimeNs: 0,
+          seq: 1,
+        ),
+        0,
+      );
+      expect(replayed.keepPlaying, isTrue);
+
+      final off = replayed.apply(
+        const PlayQueueEvent.keepPlayingChanged(enabled: false, seq: 2),
+        0,
+      );
+      expect(off.keepPlaying, isFalse);
+      expect(off.seq, 2);
+
+      final after = off
+          .apply(
+            PlayQueueEvent.tracksAdded(
+              tracks: [Track(id: 'a', title: 'A', duration: 10)],
+              seq: 3,
+            ),
+            0,
+          )
+          .apply(
+            const PlayQueueEvent.renderersChanged(renderers: [], seq: 4),
+            0,
+          )
+          .apply(const PlayQueueEvent.currentRendererChanged(seq: 5), 0)
+          .apply(
+            const PlayQueueEvent.playbackControlChanged(
+              control: _qobuz,
+              seq: 6,
+            ),
+            0,
+          )
+          .apply(const PlayQueueEvent.volumesChanged(volumes: [], seq: 7), 0);
+      expect(after.keepPlaying, isFalse);
+
+      // A replay is the whole state: a server without the setting has none.
+      final older = after.apply(
+        PlayQueueEvent.replayEvent(
+          state: PlayQueueState.fromJson(_replayJson()),
+          serverTimeNs: 0,
+          seq: 8,
+        ),
+        0,
+      );
+      expect(older.keepPlaying, isNull);
     });
   });
 

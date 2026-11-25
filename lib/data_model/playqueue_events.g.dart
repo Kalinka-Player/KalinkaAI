@@ -34,6 +34,7 @@ PlayQueueState _$PlayQueueStateFromJson(Map<String, dynamic> json) =>
           : ReceiversSnapshot.fromJson(
               json['receivers'] as Map<String, dynamic>,
             ),
+      keepPlaying: json['keep_playing'] as bool?,
     );
 
 Map<String, dynamic> _$PlayQueueStateToJson(PlayQueueState instance) =>
@@ -59,4 +60,5 @@ const _$PlayQueueEventTypeEnumMap = {
   PlayQueueEventType.volumesChanged: 'volumes_changed',
   PlayQueueEventType.receiversChanged: 'receivers_changed',
   PlayQueueEventType.playbackEvent: 'playback_event',
+  PlayQueueEventType.keepPlayingChanged: 'keep_playing_changed',
 };
