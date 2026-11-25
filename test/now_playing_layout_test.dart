@@ -457,7 +457,7 @@ void main() {
       expect(_heart, findsNothing);
       final icon = heartIcon(tester, _hearted);
       expect(icon.icon, Icons.favorite_rounded);
-      expect(icon.color, KalinkaColors.accent);
+      expect(icon.color, KalinkaColors.textSecondary);
       expect(icon.size, 20);
       expect(
         tester.getSemantics(_hearted),
