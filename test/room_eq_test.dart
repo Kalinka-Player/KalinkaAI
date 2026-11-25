@@ -43,6 +43,7 @@ class _Api implements KalinkaPlayerProxy {
   _Api(this.curve);
   EqCurve curve;
   bool firImport = false;
+  double maxManualGain = 0;
   Map<String, dynamic>? response;
   wire.FirProfile? importedImpulse;
   @override
@@ -158,7 +159,7 @@ class _Api implements KalinkaPlayerProxy {
                   'value': e.value,
                   'apply': 'instant',
                   'type': switch (e.key) {
-                    'dsp.enabled' || 'dsp.bypass' => 'bool',
+                    'dsp.enabled' || 'dsp.bypass' || 'dsp.preamp_enabled' => 'bool',
                     'dsp.preamp_db' => 'decimal',
                     _ => 'enum',
                   },
@@ -178,7 +179,7 @@ class _Api implements KalinkaPlayerProxy {
                     _ => [],
                   },
                   if (e.key == 'dsp.preamp_db')
-                    'range': {'min': -30, 'max': 0, 'step': 0.1},
+                    'range': {'min': -30, 'max': maxManualGain, 'step': 0.1},
                 },
             ],
           },
@@ -503,7 +504,7 @@ void main() {
   );
 
   testWidgets(
-    'preamp and EQ bands stay visible together and share a playback switch',
+    'legacy renderer keeps its PEQ-dependent preamp controls',
     (t) async {
       final api = _Api(
         profile == null
@@ -513,7 +514,7 @@ void main() {
       await open(t, api, const Size(1024, 768));
       final graph = find.byType(ResponseGraph);
       for (final label in [
-        'Preamp',
+        'Headroom',
         'EQ preset',
         'Filter response',
         'Parametric bands (${api.curve.channels.values.first.length})',
@@ -599,16 +600,24 @@ void main() {
           findsNothing,
         );
       }
-      await t.tap(find.text('Preamp gain'));
+      final gain = find.descendant(
+        of: find.widgetWithText(EqCard, 'Headroom'),
+        matching: find.text('Gain'),
+      );
+      await t.tap(gain);
       await t.pumpAndSettle();
+      await t.enterText(find.byType(TextField), '+1');
+      await t.pumpAndSettle();
+      expect(find.text('Enter -30 to 0.'), findsOneWidget);
       await t.enterText(find.byType(TextField), '-3.5');
+      await t.pumpAndSettle();
       await t.tap(find.text('Set'));
       await t.pumpAndSettle();
       expect(api.writes.last, {'dsp.preamp_db': '-3.5'});
       await t.tap(automatic);
       await t.pumpAndSettle();
       expect(api.writes.last, {'dsp.preamp': 'auto'});
-      expect(find.text('Preamp gain'), findsNothing);
+      expect(gain, findsNothing);
       final caption = t.widget<Text>(find.textContaining('automatically'));
       expect(caption.style, KalinkaTextStyles.trayRowSublabel);
       expect(
@@ -635,6 +644,122 @@ void main() {
       expect(find.text('Active with PEQ'), findsOneWidget);
     },
   );
+
+  testWidgets('manual headroom accepts the signed range from the renderer', (
+    t,
+  ) async {
+    final api = _Api(sample())
+      ..firImport = true
+      ..maxManualGain = 30;
+    api.values.remove('dsp.profile');
+    api.values.addAll({
+      'dsp.preamp_enabled': 'true',
+      'dsp.bypass': 'false',
+      'dsp.enabled': 'false',
+    });
+    await open(t, api, const Size(1024, 768));
+    await t.tap(find.text('Manual'));
+    await t.pumpAndSettle();
+    final card = find.widgetWithText(EqCard, 'Headroom');
+    final gain = find.descendant(of: card, matching: find.text('Gain'));
+    for (final value in ['-30', '0', '+30']) {
+      await t.tap(gain);
+      await t.pumpAndSettle();
+      await t.enterText(find.byType(TextField), value);
+      await t.tap(find.text('Set'));
+      await t.pumpAndSettle();
+      expect(api.writes.last, {
+        'dsp.preamp_db': double.parse(value).toString(),
+      });
+      expect(
+        find.descendant(of: card, matching: find.text('$value dB')),
+        findsOneWidget,
+      );
+    }
+    await t.tap(find.text('Automatic'));
+    await t.pumpAndSettle();
+    expect(gain, findsNothing);
+    await t.tap(find.text('Manual'));
+    await t.pumpAndSettle();
+    expect(find.text('+30 dB'), findsOneWidget);
+  });
+
+  testWidgets(
+    'preamp can be switched with PEQ off without changing its mode or FIR',
+    (t) async {
+      final api = _Api(sample());
+      api.values.addAll({
+        'dsp.preamp_enabled': 'true',
+        'dsp.enabled': 'false',
+        'dsp.bypass': 'false',
+      });
+      await open(t, api, const Size(1024, 768));
+      final preamp = find.text('Headroom');
+      final manual = find.widgetWithText(FilterPill, 'Manual');
+      expect(find.textContaining('FIR peaks'), findsOneWidget);
+      expect(find.text('PEQ is off'), findsNothing);
+      await t.tap(manual);
+      await t.pumpAndSettle();
+      await t.tap(preamp);
+      await t.pumpAndSettle();
+      expect(api.writes.last, {'dsp.preamp_enabled': 'false'});
+      expect(t.widget<FilterPill>(manual).selected, isTrue);
+      expect(t.widget<FilterPill>(manual).onTap, isNull);
+      await t.tap(preamp);
+      await t.pumpAndSettle();
+      expect(api.writes, [
+        {'dsp.preamp': 'manual'},
+        {'dsp.preamp_enabled': 'false'},
+        {'dsp.preamp_enabled': 'true'},
+      ]);
+      expect(t.widget<FilterPill>(manual).onTap, isNotNull);
+      expect(find.text('-2.5 dB'), findsOneWidget);
+    },
+  );
+
+  for (final size in [const Size(390, 844), const Size(1024, 900)]) {
+    testWidgets(
+      'preamp and preset highlights extend past aligned content at ${size.width}dp',
+      (t) async {
+        final api = _Api(sample());
+        api.values['dsp.preamp_enabled'] = 'true';
+        await open(t, api, size);
+        for (final title in ['Headroom', 'EQ preset']) {
+          final action = find.widgetWithText(EqCardAction, title);
+          final card = find.ancestor(of: action, matching: find.byType(EqCard));
+          final ink = find
+              .descendant(of: action, matching: find.byType(InkWell))
+              .first;
+          await t.ensureVisible(action);
+          expect(traversableFocusNodesIn(action), hasLength(1));
+          expect(await tabTo(t, action), isTrue);
+          await t.pumpAndSettle();
+          final bounds = t.getRect(ink);
+          expect(
+            t.getRect(focusOutlineIn(action, KalinkaColors.textPrimary)),
+            bounds,
+          );
+          expect(bounds.top - t.getRect(card).top, 8);
+          expect(bounds.left - t.getRect(card).left, 4);
+          expect(t.getRect(card).right - bounds.right, 4);
+          final body = title == 'Headroom'
+              ? find.widgetWithText(FilterPill, 'Automatic')
+              : find.widgetWithText(KalinkaButton, 'Save preset');
+          final labelLeft = t.getRect(find.text(title)).left;
+          expect(labelLeft, t.getRect(body).left);
+          expect(labelLeft - bounds.left, 12);
+          expect(bounds.height, greaterThanOrEqualTo(kMinInteractiveDimension));
+          await t.sendKeyEvent(LogicalKeyboardKey.enter);
+          await t.pumpAndSettle();
+          if (title == 'Headroom') {
+            expect(api.writes.last, {'dsp.preamp_enabled': 'false'});
+          } else {
+            expect(find.text('None'), findsOneWidget);
+          }
+        }
+      },
+    );
+  }
 
   testWidgets('saving a PEQ setting leaves the workspace in place', (t) async {
     final api = _Api(sample());

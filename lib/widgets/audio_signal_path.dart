@@ -44,6 +44,7 @@ String _pcm(int hz, int bits, int channels) => _details([
 /// rate change between the decoded stream and the output happened past the
 /// renderer's DSP, in ALSA or a sound server.
 const _rateKeepingSteps = {
+  'fir',
   'peq',
   'preamp',
   'dsd_gain',
@@ -122,7 +123,11 @@ List<SignalStage> signalStages(
       for (final step in steps)
         (
           kind: step.kind,
-          label: step.name.isNotEmpty ? step.name : step.kind,
+          label: switch ((step.kind, step.name)) {
+            ('preamp', 'Preamp' || '') => 'Headroom',
+            (_, '') => step.kind,
+            _ => step.name,
+          },
           detail: step.summary,
           icon: switch (step.kind) {
             'fir' => Icons.waves_rounded,

@@ -1095,7 +1095,7 @@ void main() {
         await tester.tap(button('Headroom'));
         await tester.pumpAndSettle();
         final target = find.ancestor(
-          of: find.text('Preamp'),
+          of: find.text('Headroom'),
           matching: find.byType(SettingsJumpTarget),
         );
         expect(target, findsOneWidget);
@@ -1559,20 +1559,16 @@ void main() {
         );
         final fir = cardBounds('FIR Convolution');
         final presets = cardBounds('EQ preset');
-        for (final (heading, card) in [
-          ('FIR Convolution', fir),
-          ('EQ preset', presets),
-        ]) {
-          final title = tester.getRect(find.text(heading));
-          // Headings that wrap beyond the icon target grow from the top.
-          expect(
-            title.top - card.top,
-            title.height <= 36
-                ? closeTo((48 - title.height) / 2, 1)
-                : inInclusiveRange(0, 6),
-            reason: heading,
-          );
-        }
+        final firTitle = tester.getRect(find.text('FIR Convolution'));
+        expect(
+          firTitle.top - fir.top,
+          firTitle.height <= 36
+              ? closeTo((48 - firTitle.height) / 2, 1)
+              : inInclusiveRange(0, 6),
+        );
+        final presetTitle = tester.getRect(find.text('EQ preset'));
+        expect(presetTitle.top - presets.top, greaterThanOrEqualTo(12));
+        expect(presetTitle.left - presets.left, 16);
         expect(presets.left, fir.left);
         expect(presets.width, fir.width);
         expect(presets.top - fir.bottom, greaterThanOrEqualTo(12));

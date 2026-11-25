@@ -62,6 +62,11 @@ class RendererSettingsState {
     _ => null,
   };
 
+  bool get hasHeadroom =>
+      values.containsKey('dsp.preamp_enabled') ||
+      values.containsKey('dsp.preamp') ||
+      values.containsKey('dsp.preamp_db');
+
   int get pendingCount => staged.length;
   bool get hasPendingChanges => staged.isNotEmpty;
 

@@ -305,7 +305,7 @@ class EqValueControl extends StatelessWidget {
                         children: [
                           Text(label, style: KalinkaTextStyles.trayRowSublabel),
                           Text(
-                            '${formatEqNumber(value)}${unit.isEmpty ? "" : " $unit"}',
+                            '${unit == 'dB' && value > 0 ? '+' : ''}${formatEqNumber(value)}${unit.isEmpty ? "" : " $unit"}',
                             style: KalinkaFonts.mono(
                               fontSize: 15,
                               fontWeight: FontWeight.w500,
