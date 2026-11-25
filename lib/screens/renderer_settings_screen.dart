@@ -380,7 +380,7 @@ class RendererSettingsScreenState
 
     final hasPeq = state.values.containsKey('dsp.profile');
     final hasFir = state.values.containsKey(RoomEqScreen.firPath);
-    final hasEq = hasPeq || hasFir;
+    final hasEq = hasPeq || hasFir || state.hasHeadroom;
     if (state.sections.isEmpty && !hasEq) {
       // Told apart from "nothing at all": the renderer does have settings,
       // they are just all expert-tier, so point at the switch that shows them.

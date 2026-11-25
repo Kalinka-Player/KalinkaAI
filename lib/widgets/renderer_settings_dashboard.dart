@@ -187,9 +187,9 @@ class _RendererSettingsDashboardState
                         writable.contains('dsp.enabled')) =>
               RoomEqSection.bands,
             'preamp'
-                when hasPeq &&
-                    (writable.contains('dsp.preamp') ||
-                        writable.contains('dsp.preamp_db')) =>
+                when writable.contains('dsp.preamp_enabled') ||
+                    writable.contains('dsp.preamp') ||
+                    writable.contains('dsp.preamp_db') =>
               RoomEqSection.preamp,
             'fir' when hasFir && writable.contains(firPath) =>
               RoomEqSection.fir,
@@ -263,6 +263,7 @@ class _RendererSettingsDashboardState
                       leading: Icons.equalizer_rounded,
                       sublabel: [
                         if (state.values['dsp.bypass'] == true) 'DSP bypassed',
+                        if (!hasPeq && !hasFir && state.hasHeadroom) 'Headroom',
                         if (hasPeq)
                           switch ((
                             state.values['dsp.bypass'],

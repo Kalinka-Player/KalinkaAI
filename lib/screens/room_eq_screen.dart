@@ -47,6 +47,7 @@ class RoomEqScreen extends ConsumerStatefulWidget {
     'dsp.profile',
     'dsp.enabled',
     'dsp.bypass',
+    'dsp.preamp_enabled',
     'dsp.preamp',
     'dsp.preamp_db',
   };
@@ -236,8 +237,10 @@ class RoomEqScreenState extends ConsumerState<RoomEqScreen> {
     final picked = await showKalinkaBottomSheet<String>(
       context: context,
       dialogMaxWidth: kKalinkaContentMaxWidth,
-      contentBuilder: (_) =>
-          OptionPicker(options: options, selectedValue: presetId),
+      contentBuilder: (_) => Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        child: OptionPicker(options: options, selectedValue: presetId),
+      ),
     );
     if (!mounted ||
         picked == null ||
@@ -365,29 +368,42 @@ class RoomEqScreenState extends ConsumerState<RoomEqScreen> {
     );
   }
 
-  Widget preampControls(RendererSettingsState s) {
+  Widget preampCard(RendererSettingsState s) {
     final modes = s.options['dsp.preamp'] ?? <OptionSpec>[],
         mode = s.values['dsp.preamp'];
     final db = s.expertFields
         .where((f) => f.path == 'dsp.preamp_db')
         .firstOrNull;
+    final independent = s.values.containsKey('dsp.preamp_enabled');
+    final enabled = !independent || s.values['dsp.preamp_enabled'] == true;
+    final canToggle = !busy && !s.saving && writable('dsp.preamp_enabled');
+    void toggle(bool value) =>
+        changeSetting({'dsp.preamp_enabled': value.toString()});
     final manual = mode == 'manual';
-    final canChangeMode = !busy && !s.saving && writable('dsp.preamp');
+    final canChangeMode =
+        enabled && !busy && !s.saving && writable('dsp.preamp');
     final gainControl = db == null
         ? null
         : EqValueControl(
             step: db.constraints?.step ?? .1,
-            label: 'Preamp gain',
+            label: 'Gain',
             unit: 'dB',
             value: double.tryParse('${s.values[db.path]}') ?? 0,
             min: db.constraints?.ge ?? -30,
             max: db.constraints?.le ?? 0,
-            onChanged: (manual || mode == null) && writable(db.path)
+            onChanged:
+                enabled &&
+                    !busy &&
+                    !s.saving &&
+                    (manual || mode == null) &&
+                    writable(db.path)
                 ? (v) => changeSetting({db.path: v.toString()})
                 : null,
           );
     final automaticHelp = Text(
-      'Gain is set automatically to leave headroom for EQ boosts.',
+      independent
+          ? 'Reserves headroom for FIR peaks and parametric EQ boosts.'
+          : 'Gain is set automatically to leave headroom for EQ boosts.',
       style: KalinkaTextStyles.trayRowSublabel,
     );
 
@@ -409,52 +425,74 @@ class RoomEqScreenState extends ConsumerState<RoomEqScreen> {
       );
     }
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      spacing: 8,
-      children: [
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            EqCard.title('Preamp'),
-            if (s.values.containsKey('dsp.enabled') ||
-                s.values.containsKey('dsp.bypass'))
-              IndexedStack(
-                index: s.values['dsp.bypass'] == true
-                    ? 2
-                    : s.values['dsp.enabled'] == false
-                    ? 0
-                    : 1,
+    return EqCard(
+      action: independent
+          ? EqCardAction(
+              title: 'Headroom',
+              subtitle: IndexedStack(
+                index: s.values['dsp.bypass'] == true ? 1 : 0,
                 children: [
-                  for (final status in [
-                    'PEQ is off',
-                    'Active with PEQ',
-                    'DSP bypassed',
-                  ])
+                  for (final status in ['PCM playback', 'DSP bypassed'])
                     Text(status, style: KalinkaTextStyles.trayRowSublabel),
                 ],
               ),
-          ],
-        ),
-        if (modes.isNotEmpty)
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: modes.map(modeChip).toList(),
-          ),
-        if (manual || mode == 'auto')
-          // Both modes occupy the same space, including when text wraps.
-          IndexedStack(
-            index: manual ? 1 : 0,
-            alignment: AlignmentDirectional.centerStart,
-            children: [
-              automaticHelp,
-              gainControl ?? const Text('The preamp uses a fixed gain.'),
-            ],
-          )
-        else if (mode == null && gainControl != null)
-          gainControl,
-      ],
+              trailing: ExcludeFocus(
+                child: Switch(
+                  value: enabled,
+                  onChanged: canToggle ? toggle : null,
+                ),
+              ),
+              onTap: canToggle ? () => toggle(!enabled) : null,
+            )
+          : null,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        spacing: 8,
+        children: [
+          if (!independent)
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                EqCard.title('Headroom'),
+                if (s.values.containsKey('dsp.enabled') ||
+                    s.values.containsKey('dsp.bypass'))
+                  IndexedStack(
+                    index: s.values['dsp.bypass'] == true
+                        ? 2
+                        : s.values['dsp.enabled'] == false
+                        ? 0
+                        : 1,
+                    children: [
+                      for (final status in [
+                        'PEQ is off',
+                        'Active with PEQ',
+                        'DSP bypassed',
+                      ])
+                        Text(status, style: KalinkaTextStyles.trayRowSublabel),
+                    ],
+                  ),
+              ],
+            ),
+          if (modes.isNotEmpty)
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: modes.map(modeChip).toList(),
+            ),
+          if (manual || mode == 'auto')
+            // Both modes occupy the same space, including when text wraps.
+            IndexedStack(
+              index: manual ? 1 : 0,
+              alignment: AlignmentDirectional.centerStart,
+              children: [
+                automaticHelp,
+                gainControl ?? const Text('This renderer uses a fixed gain.'),
+              ],
+            )
+          else if (mode == null && gainControl != null)
+            gainControl,
+        ],
+      ),
     );
   }
 
@@ -698,51 +736,42 @@ class RoomEqScreenState extends ConsumerState<RoomEqScreen> {
         (presetId == 'none' ? 'None' : curve.name);
     final editable = writable('dsp.profile');
     return EqCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        spacing: 12,
-        children: [
-          Semantics(
-            button: true,
-            child: InkWell(
-              onTap: editable && opts.isNotEmpty ? choosePreset : null,
-              borderRadius: BorderRadius.circular(8),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(child: EqCard.title('EQ preset')),
-                      const Icon(Icons.keyboard_arrow_down_rounded, size: 20),
-                    ],
-                  ),
-                  Text(
-                    preset,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: KalinkaTextStyles.textFieldInput,
-                  ),
-                ],
-              ),
-            ),
+      spacing: 12,
+      action: Semantics(
+        button: true,
+        child: EqCardAction(
+          title: 'EQ preset',
+          subtitle: Text(
+            preset,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: KalinkaTextStyles.textFieldInput,
           ),
-          if (editable) ...[
-            KalinkaButton(
-              label: 'Save preset',
-              fullWidth: true,
-              enabled: hasActiveBand && !busy && !s.saving,
-              onTap: () => publish(importing: false),
-            ),
-            KalinkaButton(
-              label: 'Import REW',
-              fullWidth: true,
-              variant: KalinkaButtonVariant.neutral,
-              enabled: !busy && !s.saving,
-              onTap: () => publish(importing: true),
-            ),
-          ],
-        ],
+          trailing: const Icon(Icons.keyboard_arrow_down_rounded, size: 20),
+          onTap: editable && opts.isNotEmpty ? choosePreset : null,
+        ),
       ),
+      child: editable
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              spacing: 12,
+              children: [
+                KalinkaButton(
+                  label: 'Save preset',
+                  fullWidth: true,
+                  enabled: hasActiveBand && !busy && !s.saving,
+                  onTap: () => publish(importing: false),
+                ),
+                KalinkaButton(
+                  label: 'Import REW',
+                  fullWidth: true,
+                  variant: KalinkaButtonVariant.neutral,
+                  enabled: !busy && !s.saving,
+                  onTap: () => publish(importing: true),
+                ),
+              ],
+            )
+          : null,
     );
   }
 
@@ -773,16 +802,22 @@ class RoomEqScreenState extends ConsumerState<RoomEqScreen> {
               ],
             ),
           );
+    final headroom = s.hasHeadroom
+        ? _section(RoomEqSection.preamp, preampCard(s))
+        : null;
     if (!s.values.containsKey('dsp.profile')) {
-      return ListView(
+      return SingleChildScrollView(
         padding: const EdgeInsets.all(16),
-        children: [
-          if (s.firResponse != null)
-            EqCard(
-              child: graph(plotted: const [], height: 186, settings: s),
-            ),
-          if (firControl != null) _section(RoomEqSection.fir, firControl),
-        ],
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          spacing: 12,
+          children: [
+            if (s.firResponse != null)
+              EqCard(child: graph(plotted: const [], height: 186, settings: s)),
+            ?headroom,
+            if (firControl != null) _section(RoomEqSection.fir, firControl),
+          ],
+        ),
       );
     }
     final scale = math.max(
@@ -791,9 +826,6 @@ class RoomEqScreenState extends ConsumerState<RoomEqScreen> {
     );
     final wide = box.maxWidth >= 760 * scale;
     final gutter = wide ? 16.0 : 12.0;
-    final hasPreamp =
-        s.values.containsKey('dsp.preamp') ||
-        s.values.containsKey('dsp.preamp_db');
     final hasSwitch = s.values.containsKey('dsp.enabled');
     final editable = writable('dsp.profile');
     final plotted = sliderPreview == null
@@ -815,8 +847,7 @@ class RoomEqScreenState extends ConsumerState<RoomEqScreen> {
       ),
     );
     final processing = [
-      if (hasPreamp)
-        _section(RoomEqSection.preamp, EqCard(child: preampControls(s))),
+      ?headroom,
       if (firControl != null) _section(RoomEqSection.fir, firControl),
       presetCard(s),
     ];
@@ -951,7 +982,7 @@ class RoomEqScreenState extends ConsumerState<RoomEqScreen> {
                     entryFocus: KeyboardEntryFocus.scope,
                     action: s.values.containsKey('dsp.bypass')
                         ? Tooltip(
-                            message: 'Bypass FIR, parametric EQ and preamp',
+                            message: 'Bypass FIR, parametric EQ and headroom adjustment',
                             excludeFromSemantics: true,
                             child: settingSwitch(s, 'Bypass DSP', 'dsp.bypass'),
                           )
