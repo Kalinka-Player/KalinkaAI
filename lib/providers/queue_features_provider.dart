@@ -54,19 +54,6 @@ final dislikeAvailableProvider = Provider<bool>(
       ref.watch(nowPlayingTrackProvider.select((track) => track != null)),
 );
 
-/// Whether one of [sources] can suggest tracks to follow its own.
-bool _anyContinues(Ref ref, Set<String> sources) => ref.watch(
-  sourceModulesProvider.select(
-    (modules) =>
-        modules.value?.any(
-          (module) =>
-              sources.contains(module.name) &&
-              module.can(ModuleCapability.continuation),
-        ) ??
-        false,
-  ),
-);
-
 /// Whether tracks like the playing one can be asked for: the server queues
 /// them, and the playing track's own source can suggest them.
 final similarTracksAvailableProvider = Provider<bool>((ref) {
@@ -80,7 +67,8 @@ final similarTracksAvailableProvider = Provider<bool>((ref) {
       (track) => track == null ? null : sourceOfId(track.id),
     ),
   );
-  return source != null && _anyContinues(ref, {source});
+  return source != null &&
+      watchSourcesCan(ref, {source}, ModuleCapability.continuation);
 });
 
 /// Whether the server's Keep playing is on, as the queue's state says: null
@@ -103,5 +91,6 @@ final keepPlayingOfferedProvider = Provider<bool>((ref) {
     }),
   );
   final sources = {for (final track in ended) ?sourceOfId(track.id)};
-  return sources.isNotEmpty && _anyContinues(ref, sources);
+  return sources.isNotEmpty &&
+      watchSourcesCan(ref, sources, ModuleCapability.continuation);
 });

@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
 
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/rendering.dart';
@@ -19,6 +21,7 @@ import 'package:kalinka/providers/renderer_provider.dart';
 import 'package:kalinka/providers/renderer_host_provider.dart';
 import 'package:kalinka/renderer/renderer_identity.dart';
 import 'package:kalinka/providers/shell_nav_provider.dart';
+import 'package:kalinka/providers/server_refusal.dart';
 import 'package:kalinka/providers/toast_provider.dart';
 import 'package:kalinka/theme/app_theme.dart';
 import 'package:kalinka/widgets/now_playing_content.dart';
@@ -76,8 +79,72 @@ class _DislikeApi extends HomeApi {
   }
 }
 
+/// Keeps favourites as a server would: [favorites] are the source's marked
+/// tracks. An add or a remove fails with [failure] where it is set, and waits
+/// for [held] where that is.
+class _FavoritesApi extends _DislikeApi {
+  _FavoritesApi({this.favorites = const {}, this.failure, this.held});
+
+  final Set<String> favorites;
+  final Exception? failure;
+  final Completer<void>? held;
+  final List<String?> asked = [];
+  final List<String> added = [];
+  final List<String> removed = [];
+
+  @override
+  Future<FavoriteIds> getFavoriteIds({String? source}) async {
+    asked.add(source);
+    return FavoriteIds(
+      albums: [],
+      tracks: [...favorites],
+      artists: [],
+      playlists: [],
+    );
+  }
+
+  @override
+  Future<StatusMessage> addFavorite(String id) async {
+    added.add(id);
+    return _answer();
+  }
+
+  @override
+  Future<StatusMessage> removeFavorite(String id) async {
+    removed.add(id);
+    return _answer();
+  }
+
+  Future<StatusMessage> _answer() async {
+    await held?.future;
+    if (failure != null) throw failure!;
+    return StatusMessage(message: 'Ok');
+  }
+}
+
 const _dislikes = QueueFeatures(similar: true, dislike: true);
 final _dislike = find.byTooltip('Not like this');
+final _heart = find.byTooltip('Add to favourites');
+final _hearted = find.byTooltip('Remove from favourites');
+
+/// Which of the thumb-down and the heart a layout is checked with.
+const _titleActionCases = [
+  (false, false),
+  (true, false),
+  (false, true),
+  (true, true),
+];
+
+/// The source the queue's tracks come from where they need one.
+const _qobuz = 'qobuz';
+
+ModuleInfo _source({bool favorites = true}) => ModuleInfo(
+  name: _qobuz,
+  title: 'Qobuz',
+  enabled: true,
+  state: ModuleState.ready,
+  capabilities: [if (favorites) ModuleCapability.favorites],
+);
 
 final _preview = find.byKey(const ValueKey('now-playing-up-next'));
 final _art = find.byKey(const ValueKey('now-playing-artwork'));
@@ -96,11 +163,12 @@ PlayQueueState _queue({
   bool exclusive = false,
   int seq = 1,
   bool longNames = false,
+  String? source,
 }) => PlayQueueState(
   trackList: [
     for (var i = 0; i < count; i++)
       Track(
-        id: 'track-$i',
+        id: source == null ? 'track-$i' : 'kalinka:$source:track:$i',
         title: longNames
             ? 'Evening track $i — a live recording from the northern coast'
             : 'Evening track $i',
@@ -126,26 +194,52 @@ PlayQueueState _queue({
   seq: seq,
 );
 
-/// The thumbs-down trails the title as a whole target inside the window,
-/// clear of the title and level with it; or is not there. A short window
-/// scales the presentation it sits in down, so its target is measured in the
-/// presentation's own terms.
-void _expectDislikeBesideTitle(
+/// The thumb-down and the heart beside [title] where [dislike] and [favorite]
+/// say they show, each a whole 48dp target inside the window, its top at the
+/// title's top. Flush left they follow the title, thumb-down first; else the
+/// thumb-down comes before it and the heart after it, and the title keeps the
+/// centre of the details whichever shows. A short window scales the
+/// presentation they sit in down, so their size is measured in its own terms.
+void _expectTitleActions(
   WidgetTester tester,
   String title, {
-  required bool shown,
+  required bool dislike,
+  required bool favorite,
+  required bool leftAligned,
 }) {
-  if (!shown) {
-    expect(_dislike, findsNothing);
+  final text = tester.getRect(find.text(title));
+  final shown = <Rect>[];
+  for (final (button, on) in [(_dislike, dislike), (_heart, favorite)]) {
+    if (!on) {
+      expect(button, findsNothing);
+      continue;
+    }
+    expect(button.hitTestable(), findsOneWidget);
+    expect(tester.getSize(button), const Size.square(48));
+    final bounds = tester.getRect(button);
+    expect(bounds.top, closeTo(text.top, 0.5));
+    expect(bounds.left, greaterThanOrEqualTo(0));
+    expect(
+      bounds.right,
+      lessThanOrEqualTo(tester.view.physicalSize.width - 16),
+    );
+    shown.add(bounds);
+  }
+  if (leftAligned) {
+    var after = text.right;
+    for (final bounds in shown) {
+      expect(bounds.left, greaterThanOrEqualTo(after));
+      after = bounds.right;
+    }
     return;
   }
-  expect(_dislike.hitTestable(), findsOneWidget);
-  final button = tester.getRect(_dislike);
-  final text = tester.getRect(find.text(title));
-  expect(tester.getSize(_dislike), const Size.square(48));
-  expect(button.left, greaterThanOrEqualTo(text.right));
-  expect(button.center.dy, closeTo(text.center.dy, 0.5));
-  expect(button.right, lessThanOrEqualTo(tester.view.physicalSize.width - 16));
+  if (dislike) {
+    expect(tester.getRect(_dislike).right, lessThanOrEqualTo(text.left));
+  }
+  if (favorite) {
+    expect(tester.getRect(_heart).left, greaterThanOrEqualTo(text.right));
+  }
+  expect(text.center.dx, closeTo(tester.getCenter(_metadata).dx, 0.5));
 }
 
 Future<ProviderContainer> _pump(
@@ -159,12 +253,14 @@ Future<ProviderContainer> _pump(
   String outputName = 'Living room',
   QueueFeatures? features,
   KalinkaPlayerProxy? api,
+  List<ModuleInfo> sources = const [],
 }) async {
   final container = await pumpHomeShell(
     tester,
     queue: queue,
     size: size,
     api: api,
+    sources: sources,
     overrides: [
       if (features != null)
         queueFeaturesProvider.overrideWith((ref) async => features),
@@ -303,6 +399,187 @@ void main() {
       await tester.pump();
 
       expect(api.disliked, 0);
+    });
+  });
+
+  group('favourite heart', () {
+    const playing = 'kalinka:$_qobuz:track:0';
+
+    Future<ProviderContainer> pumpHeart(
+      WidgetTester tester,
+      _FavoritesApi api, {
+      PlayQueueState? queue,
+      List<ModuleInfo>? sources,
+    }) => _pump(
+      tester,
+      queue: SettableQueue(queue ?? _queue(source: _qobuz)),
+      features: QueueFeatures.none,
+      api: api,
+      sources: sources ?? [_source()],
+    );
+
+    Icon heartIcon(WidgetTester tester, Finder heart) => tester.widget<Icon>(
+      find.descendant(of: heart, matching: find.byType(Icon)),
+    );
+
+    for (final (name, queue, sources) in [
+      ('a source that keeps no favourites', null, [_source(favorites: false)]),
+      ('a track of another source', _queue(source: 'jamendo'), null),
+      ('a plugin playing', _queue(source: _qobuz, exclusive: true), null),
+      ('an empty queue', PlayQueueState.empty, null),
+    ]) {
+      testWidgets('$name offers none', (tester) async {
+        final api = _FavoritesApi();
+        await pumpHeart(tester, api, queue: queue, sources: sources);
+        expect(_heart, findsNothing);
+        expect(_hearted, findsNothing);
+        expect(api.asked, isEmpty);
+      });
+    }
+
+    testWidgets('shows what the track\'s source has marked', (tester) async {
+      final api = _FavoritesApi(favorites: {playing});
+      await pumpHeart(tester, api);
+
+      expect(api.asked, [_qobuz]);
+      expect(_hearted, findsOneWidget);
+      expect(_heart, findsNothing);
+      final icon = heartIcon(tester, _hearted);
+      expect(icon.icon, Icons.favorite_rounded);
+      expect(icon.color, KalinkaColors.accent);
+      expect(icon.size, 20);
+      expect(
+        tester.getSemantics(_hearted),
+        matchesSemantics(
+          label: 'Remove from favourites',
+          isButton: true,
+          hasEnabledState: true,
+          isEnabled: true,
+          hasTapAction: true,
+          isFocusable: true,
+          hasFocusAction: true,
+        ),
+      );
+    });
+
+    testWidgets('a tap marks it at once, and sends once', (tester) async {
+      final held = Completer<void>();
+      final api = _FavoritesApi(held: held);
+      final container = await pumpHeart(tester, api);
+      final icon = heartIcon(tester, _heart);
+      expect(icon.icon, Icons.favorite_border_rounded);
+      expect(icon.color, KalinkaColors.textSecondary);
+
+      await tester.tap(_heart);
+      await tester.pump();
+      expect(_hearted, findsOneWidget);
+      await tester.tap(_hearted, warnIfMissed: false);
+      await tester.pump();
+      expect(api.added, [playing]);
+      expect(api.removed, isEmpty);
+
+      held.complete();
+      await tester.pump();
+      expect(_hearted, findsOneWidget);
+      expect(container.read(toastProvider), isEmpty);
+    });
+
+    testWidgets('a tap on a favourite takes it off', (tester) async {
+      final api = _FavoritesApi(favorites: {playing});
+      await pumpHeart(tester, api);
+
+      await tester.tap(_hearted);
+      await tester.pump();
+
+      expect(api.removed, [playing]);
+      expect(api.added, isEmpty);
+      expect(_heart, findsOneWidget);
+    });
+
+    for (final (failure, said) in [
+      (Exception('connection reset'), 'Could not add this track to favourites'),
+      (
+        ServerRefusalException(
+          DioException(requestOptions: RequestOptions()),
+          'demo_read_only',
+          'This is a read-only demo server.',
+        ),
+        'This is a read-only demo server.',
+      ),
+    ]) {
+      testWidgets('a failed mark is taken back: $said', (tester) async {
+        final api = _FavoritesApi(failure: failure);
+        final container = await pumpHeart(tester, api);
+
+        await tester.tap(_heart);
+        await tester.pump();
+
+        expect(api.added, [playing]);
+        expect(_heart, findsOneWidget);
+        expect(_hearted, findsNothing);
+        final toast = container.read(toastProvider).single;
+        expect(toast.message, said);
+        expect(toast.isError, isTrue);
+        expect(toast.inPanel, isTrue);
+        await tester.pump(const Duration(seconds: 30));
+      });
+    }
+
+    testWidgets('a failed removal says so and keeps the mark', (tester) async {
+      final api = _FavoritesApi(
+        favorites: {playing},
+        failure: Exception('connection reset'),
+      );
+      final container = await pumpHeart(tester, api);
+
+      await tester.tap(_hearted);
+      await tester.pump();
+
+      expect(api.removed, [playing]);
+      expect(_hearted, findsOneWidget);
+      expect(
+        container.read(toastProvider).single.message,
+        'Could not remove this track from favourites',
+      );
+      await tester.pump(const Duration(seconds: 30));
+    });
+
+    testWidgets('a server away takes no tap', (tester) async {
+      final api = _FavoritesApi();
+      final container = await pumpHeart(tester, api);
+      (container.read(connectionStateProvider.notifier) as SettableConnection)
+          .set(ConnectionStatus.offline);
+      await tester.pump();
+
+      await tester.tap(_heart, warnIfMissed: false);
+      await tester.pump();
+
+      expect(api.added, isEmpty);
+    });
+
+    testWidgets('a two-line title keeps both on its first line', (
+      tester,
+    ) async {
+      final queue = _queue(source: _qobuz, longNames: true);
+      await _pump(
+        tester,
+        queue: SettableQueue(queue),
+        size: const Size(375, 812),
+        features: _dislikes,
+        api: _FavoritesApi(),
+        sources: [_source()],
+      );
+      final title = tester.getRect(find.text(queue.trackList.first.title));
+
+      _expectTitleActions(
+        tester,
+        queue.trackList.first.title,
+        dislike: true,
+        favorite: true,
+        leftAligned: false,
+      );
+      expect(title.height, greaterThan(tester.getRect(_heart).height));
+      expect(tester.takeException(), isNull);
     });
   });
 
@@ -658,7 +935,7 @@ void main() {
     });
   }
 
-  for (final dislike in [false, true]) {
+  for (final (dislike, favorite) in _titleActionCases) {
     for (final (size, scale, overlay) in [
       (const Size(936, 600), 1.0, false),
       (const Size(1200, 800), 1.0, false),
@@ -669,13 +946,13 @@ void main() {
       (const Size(2400, 1600), 3.2, true),
     ]) {
       testWidgets(
-        'wide player groups controls beside the cover at $size / $scale / overlay $overlay / dislike $dislike',
+        'wide player groups controls beside the cover at $size / $scale / overlay $overlay / dislike $dislike / favourite $favorite',
         (tester) async {
           final key = GlobalKey();
           final outputKey = GlobalKey();
           final container = await _pump(
             tester,
-            queue: SettableQueue(_queue()),
+            queue: SettableQueue(_queue(source: _qobuz)),
             size: size,
             scale: scale,
             captureKey: key,
@@ -685,9 +962,17 @@ void main() {
                 ? 'Living room amplifier with a very long device name'
                 : 'SMSL-SU1',
             features: dislike ? _dislikes : null,
+            sources: [_source(favorites: favorite)],
+            api: favorite ? _FavoritesApi() : null,
           );
           final original = container.read(playQueueStateStoreProvider);
-          _expectDislikeBesideTitle(tester, 'Evening track 0', shown: dislike);
+          _expectTitleActions(
+            tester,
+            'Evening track 0',
+            dislike: dislike,
+            favorite: favorite,
+            leftAligned: true,
+          );
           final cover = tester.getRect(_art);
           final controls = find.byKey(
             const ValueKey('now-playing-landscape-controls'),
@@ -760,7 +1045,7 @@ void main() {
                 format: ui.ImageByteFormat.png,
               );
               final file = File(
-                '$captures/playing-${size.width}-${size.height}-$scale-$overlay-$dislike.png',
+                '$captures/playing-${size.width}-${size.height}-$scale-$overlay-$dislike-$favorite.png',
               );
               await file.parent.create(recursive: true);
               await file.writeAsBytes(bytes!.buffer.asUint8List());
@@ -792,9 +1077,10 @@ void main() {
     }
   }
 
-  for (final dislike in [false, true]) {
+  for (final (dislike, favorite) in _titleActionCases) {
     for (final (name, size, scale, sideBySide) in [
       ('short', const Size(432, 720), 1.0, false),
+      ('long-text', const Size(375, 812), 1.0, false),
       ('desktop', const Size(432, 1080), 1.0, false),
       ('tall', const Size(432, 1200), 1.0, false),
       ('large-text', const Size(375, 812), 2.0, false),
@@ -807,10 +1093,13 @@ void main() {
       ('narrow-square', const Size(320, 400), 1.0, false),
     ]) {
       testWidgets(
-        '$name fits artwork, details and controls without scrolling / dislike $dislike',
+        '$name fits artwork, details and controls without scrolling / dislike $dislike / favourite $favorite',
         (tester) async {
           final captureKey = GlobalKey();
-          final queue = _queue(longNames: name == 'square-long-text');
+          final queue = _queue(
+            longNames: name.endsWith('long-text'),
+            source: _qobuz,
+          );
           await _pump(
             tester,
             queue: SettableQueue(queue),
@@ -818,11 +1107,15 @@ void main() {
             scale: scale,
             captureKey: captureKey,
             features: dislike ? _dislikes : null,
+            sources: [_source(favorites: favorite)],
+            api: favorite ? _FavoritesApi() : null,
           );
-          _expectDislikeBesideTitle(
+          _expectTitleActions(
             tester,
             queue.trackList.first.title,
-            shown: dislike,
+            dislike: dislike,
+            favorite: favorite,
+            leftAligned: sideBySide,
           );
           expect(
             tester.getTopLeft(_presentation).dy,
@@ -917,7 +1210,7 @@ void main() {
               final bytes = await image.toByteData(
                 format: ui.ImageByteFormat.png,
               );
-              final file = File('$captures/$name-$dislike.png');
+              final file = File('$captures/$name-$dislike-$favorite.png');
               await file.parent.create(recursive: true);
               await file.writeAsBytes(bytes!.buffer.asUint8List());
               image.dispose();
