@@ -1,8 +1,10 @@
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data_model/data_model.dart';
+import '../../providers/favorites_provider.dart';
 import '../../theme/app_theme.dart';
 import 'collection_row.dart';
 import 'row_columns.dart';
@@ -26,7 +28,7 @@ import 'show_more_row.dart';
 ///
 /// Shared by every list of browse rows so tap-to-play animation, sibling
 /// dim, and row styling stay consistent between them.
-class BrowseItemRows extends StatelessWidget {
+class BrowseItemRows extends ConsumerWidget {
   final List<BrowseItem> items;
   final int? visibleLimit;
   final bool isExpanded;
@@ -59,7 +61,7 @@ class BrowseItemRows extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     if (items.isEmpty) return const SizedBox.shrink();
 
     final limit = visibleLimit;
@@ -126,6 +128,7 @@ class BrowseItemRows extends StatelessWidget {
       details: RowColumnsListing.anyDetails(displayed),
       artists: RowColumnsListing.anyArtists(displayed),
       tracks: displayed.every((item) => item.browseType == BrowseType.track),
+      favorites: watchAnyFavorites(ref, displayed),
       table: table && RowColumnsListing.oneKind(displayed),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -203,10 +206,18 @@ class BrowseItemRows extends StatelessWidget {
   }
 }
 
+/// Whether any track among [items] can be marked a favourite, watched so
+/// their listing is rebuilt only when that changes.
+bool watchAnyFavorites(WidgetRef ref, List<BrowseItem> items) => ref.watch(
+  favoriteSourcesProvider.select(
+    (keeping) => RowColumnsListing.anyFavorites(items, keeping),
+  ),
+);
+
 /// [BrowseItemRows] as a sliver that builds only the rows in view, for lists
 /// long enough that building them whole would stall a frame, and with it a
 /// resize.
-class SliverBrowseItemRows extends StatelessWidget {
+class SliverBrowseItemRows extends ConsumerWidget {
   final List<BrowseItem> items;
   final List<String>? queueContextIds;
   final bool labelled;
@@ -219,13 +230,14 @@ class SliverBrowseItemRows extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     if (items.isEmpty) return const SliverToBoxAdapter();
     final tracks = items.every((item) => item.browseType == BrowseType.track);
     return RowColumnsListing(
       details: RowColumnsListing.anyDetails(items),
       artists: RowColumnsListing.anyArtists(items),
       tracks: tracks,
+      favorites: watchAnyFavorites(ref, items),
       table: RowColumnsListing.oneKind(items),
       child: SliverList.builder(
         itemCount: items.length + 1,

@@ -7,7 +7,6 @@ import '../data_model/data_model.dart';
 import '../providers/app_state_provider.dart';
 import '../providers/connection_state_provider.dart';
 import '../providers/kalinka_player_api_provider.dart';
-import '../providers/now_playing_favorite_provider.dart';
 import '../providers/now_playing_provider.dart';
 import '../providers/queue_features_provider.dart';
 import '../providers/search_session_provider.dart';
@@ -22,6 +21,7 @@ import '../providers/source_modules_provider.dart';
 import 'away.dart';
 import 'playback_format_badge.dart';
 import 'browse_metadata_link.dart';
+import 'favorite_toggle.dart';
 import 'kalinka_dialog.dart';
 import 'kiosk/kiosk_enter_button.dart';
 import 'kalinka_toast_overlay.dart' show kalinkaMiniPlayerHeight;
@@ -128,7 +128,7 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
     ref.watch(playbackControlProvider.select((c) => c.isExclusive));
     ref.watch(nowPlayingMetadataLinksProvider);
     ref.watch(dislikeAvailableProvider);
-    ref.watch(favoriteAvailableProvider);
+    ref.watch(nowPlayingFavoriteProvider);
     final away = ref.watch(
       connectionStateProvider.select((s) => s.isInterrupted),
     );
@@ -721,9 +721,10 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
   /// laying it out as for measuring it.
   ({Widget? dislike, Widget? favorite}) _titleActions() => (
     dislike: ref.read(dislikeAvailableProvider) ? const _DislikeButton() : null,
-    favorite: ref.read(favoriteAvailableProvider)
-        ? const _FavoriteButton()
-        : null,
+    favorite: switch (ref.read(nowPlayingFavoriteProvider)) {
+      final trackId? => _FavoriteButton(trackId),
+      null => null,
+    },
   );
 
   /// The title with [_titleActions] at the details' edges, however long the
@@ -1090,56 +1091,20 @@ class _DislikeButtonState extends ConsumerState<_DislikeButton> {
   );
 }
 
-/// Marks the playing track a favourite of its source, or no longer one,
-/// showing the change at once and undoing it with an error toast if the
-/// server does not make it. Inert until the source's favourites are first
-/// known, and while its last tap is answered, so one tap sends once.
-class _FavoriteButton extends ConsumerStatefulWidget {
-  const _FavoriteButton();
+/// The playing track's heart: [FavoriteToggle] as a title action, its
+/// failures told over the player's pane.
+class _FavoriteButton extends StatelessWidget {
+  final String trackId;
+
+  const _FavoriteButton(this.trackId);
 
   @override
-  ConsumerState<_FavoriteButton> createState() => _FavoriteButtonState();
-}
-
-class _FavoriteButtonState extends ConsumerState<_FavoriteButton> {
-  bool _sending = false;
-
-  Future<void> _toggle(String trackId, {required bool adding}) async {
-    final toast = ref.read(toastProvider.notifier);
-    final favorites = ref.read(favoriteTracksProvider.notifier);
-    setState(() => _sending = true);
-    try {
-      await favorites.toggle(trackId);
-    } catch (e) {
-      toast.show(
-        e is ServerRefusalException
-            ? '$e'
-            : adding
-            ? 'Could not add this track to favourites'
-            : 'Could not remove this track from favourites',
-        isError: true,
-        inPanel: true,
-      );
-    } finally {
-      if (mounted) setState(() => _sending = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final trackId = ref.watch(nowPlayingTrackProvider.select((t) => t?.id));
-    final favorites = ref.watch(favoriteTracksProvider);
-    final favorite =
-        trackId != null && (favorites.value?.contains(trackId) ?? false);
-    final known = favorites.hasValue;
-    return _TitleAction(
-      label: favorite ? 'Remove from favourites' : 'Add to favourites',
-      icon: favorite ? Icons.favorite_rounded : Icons.favorite_border_rounded,
-      onTap: _sending || !known || trackId == null
-          ? null
-          : () => _toggle(trackId, adding: !favorite),
-    );
-  }
+  Widget build(BuildContext context) => FavoriteToggle(
+    id: trackId,
+    inPanel: true,
+    builder: (context, mark) =>
+        _TitleAction(label: mark.label, icon: mark.icon, onTap: mark.toggle),
+  );
 }
 
 /// Transport controls row (shuffle, prev, play/pause, next, repeat).

@@ -268,6 +268,9 @@ class PlayQueueState {
         return copyWith(seq: seq);
       case KeepPlayingChangedEvent(:final enabled, :final seq):
         return copyWith(keepPlaying: enabled, seq: seq);
+      case FavoriteChangedEvent():
+        // Kept by the favourites of the entity's source.
+        return this;
       case final PlaybackEvent event:
         // The seq stays: what watches it would rebuild on every event.
         return copyWith(
@@ -449,7 +452,8 @@ enum PlayQueueEventType {
   volumesChanged,
   receiversChanged,
   playbackEvent,
-  keepPlayingChanged;
+  keepPlayingChanged,
+  favoriteChanged;
 
   String toJson() => _$PlayQueueEventTypeEnumMap[this]!;
 
@@ -557,6 +561,14 @@ sealed class PlayQueueEvent with _$PlayQueueEvent {
     required List<ReceiverSnapshot> receivers,
     required int seq,
   }) = ReceiversChangedEvent;
+
+  /// The entity [id] was marked a favourite of its source, or no longer is,
+  /// through the server: by this client or any other.
+  const factory PlayQueueEvent.favoriteChanged({
+    required String id,
+    required bool favorite,
+    required int seq,
+  }) = FavoriteChangedEvent;
 
   /// Something that happened while the current renderer played, named by
   /// [kind] with that kind's [details], in the play [playId] names: null from
@@ -685,6 +697,12 @@ sealed class PlayQueueEvent with _$PlayQueueEvent {
       case 'keep_playing_changed':
         return PlayQueueEvent.keepPlayingChanged(
           enabled: json['enabled'] as bool,
+          seq: seq,
+        );
+      case 'favorite_changed':
+        return PlayQueueEvent.favoriteChanged(
+          id: json['id'] as String,
+          favorite: json['favorite'] as bool,
           seq: seq,
         );
       case 'playback_event':

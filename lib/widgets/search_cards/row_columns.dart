@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data_model/data_model.dart';
+import '../../providers/favorites_provider.dart';
 import '../../providers/source_modules_provider.dart';
 import '../../theme/app_theme.dart';
 import '../source_badge.dart';
@@ -26,6 +27,10 @@ class RowColumns {
   final bool artists;
   final bool showSource;
   final bool tracks;
+
+  /// False where no track of the listing can be marked a favourite, so no
+  /// row keeps room for a heart.
+  final bool favorites;
   final double textScale;
 
   const RowColumns(
@@ -34,14 +39,16 @@ class RowColumns {
     this.artists = true,
     this.showSource = true,
     this.tracks = false,
+    this.favorites = false,
     this.textScale = 1,
   });
 
   static const none = RowColumns(0);
 
   /// What a row keeps right of its columns for its own controls: a gap, a
-  /// play button and a chevron.
-  static const double gutter = gap + 92;
+  /// play button and a chevron, and a track's heart where the listing keeps
+  /// room for one.
+  double get gutter => gap + 92 + _favoriteRoom;
   static const double gap = 16;
 
   bool get detail => details && width >= (tracks ? 576 : 600) * textScale;
@@ -53,6 +60,25 @@ class RowColumns {
   /// Wide enough for a track's Album column; a track row then has room for
   /// its own enqueue button, where it otherwise relies on a swipe.
   bool get wide => width >= 576 * textScale;
+
+  /// A track's heart: the +'s square beside it on a wide row, and at a
+  /// narrow row's end, where there is no +, a whole touch target.
+  double get favoriteSize => wide ? RowEnqueueButton.size : 48;
+
+  /// Between a wide row's heart and its +, so a click meant for one never
+  /// lands on the other.
+  static const double favoriteGap = 16;
+
+  double get _favoriteRoom =>
+      favorites ? favoriteSize + (wide ? favoriteGap : 0) : 0;
+
+  /// What a track row sets between its time and its right padding: the
+  /// heart where the listing keeps room for one, then on a wide row the +.
+  /// The header holds TIME as far in, so it stays over the times.
+  double get afterTime {
+    final controls = _favoriteRoom + (wide ? RowEnqueueButton.size : 0);
+    return controls == 0 ? 0 : RowEnqueueButton.gap + controls;
+  }
 
   double get detailWidth =>
       (width * (tracks ? 0.26 : 0.2)).clamp(
@@ -92,6 +118,7 @@ class RowColumnsScope extends StatelessWidget {
             RowColumnsListing.tableOf(context) &&
             SourceAttributionScope.of(context) == null,
         tracks: RowColumnsListing.tracksOf(context),
+        favorites: RowColumnsListing.favoritesOf(context),
         textScale: MediaQuery.textScalerOf(context).scale(14) / 14,
       ),
     ),
@@ -107,6 +134,11 @@ class RowColumnsListing extends InheritedWidget {
   final bool tracks;
   final bool hideTrackType;
 
+  /// Whether any of the listing's tracks can be marked a favourite. Every
+  /// track row then keeps the heart's room, so times stay in one column; a
+  /// listing where none can gives up no width for it.
+  final bool favorites;
+
   /// False where the rows are of more than one kind: a column would hold an
   /// album under one row and an artist's count under the next, so each row
   /// says what it is on its own second line and no header names columns.
@@ -118,6 +150,7 @@ class RowColumnsListing extends InheritedWidget {
     this.artists = true,
     this.tracks = false,
     this.hideTrackType = false,
+    this.favorites = false,
     this.table = true,
     required super.child,
   });
@@ -152,6 +185,12 @@ class RowColumnsListing extends InheritedWidget {
           ?.hideTrackType ??
       false;
 
+  static bool favoritesOf(BuildContext context) =>
+      context
+          .dependOnInheritedWidgetOfExactType<RowColumnsListing>()
+          ?.favorites ??
+      false;
+
   /// Whether any of [items] would fill the Details column. Only albums are
   /// known to come without; any other row is taken to have some.
   static bool anyDetails(Iterable<BrowseItem> items) => items.any((item) {
@@ -170,12 +209,23 @@ class RowColumnsListing extends InheritedWidget {
         item.browseType == BrowseType.album,
   );
 
+  /// Whether any track among [items] can be marked a favourite, [keeping]
+  /// being the sources that keep them.
+  static bool anyFavorites(Iterable<BrowseItem> items, Set<String> keeping) =>
+      keeping.isNotEmpty &&
+      items.any(
+        (item) =>
+            item.browseType == BrowseType.track &&
+            favoriteSourceOf(item.id, keeping) != null,
+      );
+
   @override
   bool updateShouldNotify(RowColumnsListing oldWidget) =>
       details != oldWidget.details ||
       artists != oldWidget.artists ||
       tracks != oldWidget.tracks ||
       hideTrackType != oldWidget.hideTrackType ||
+      favorites != oldWidget.favorites ||
       table != oldWidget.table;
 }
 
@@ -336,20 +386,15 @@ class RowColumnsHeader extends StatelessWidget {
                 SizedBox(width: RowColumns.sourceWidth, child: label('SOURCE')),
               ],
               // Over the duration, which a track row sets 8 in from its
-              // edge and, as wide as this, before its +.
+              // edge and before its own controls.
               SizedBox(
-                width: RowColumns.gutter,
+                width: columns.gutter,
                 child: tracks
                     ? Align(
                         alignment: Alignment.centerRight,
                         child: Padding(
                           padding: EdgeInsets.only(
-                            right:
-                                8 +
-                                (columns.wide
-                                    ? RowEnqueueButton.gap +
-                                          RowEnqueueButton.size
-                                    : 0),
+                            right: 8 + columns.afterTime,
                           ),
                           child: label('TIME'),
                         ),

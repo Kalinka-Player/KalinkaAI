@@ -18,7 +18,8 @@ class RowEnqueueButton extends ConsumerStatefulWidget {
 
   const RowEnqueueButton({super.key, required this.item});
 
-  /// Its square, as tall as the row's cover, and the gap before it.
+  /// Its square, as tall as the row's cover, and the gap a row leaves
+  /// between its time and what follows.
   static const double size = 44;
   static const double gap = 8;
 

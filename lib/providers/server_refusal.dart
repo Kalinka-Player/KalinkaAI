@@ -9,11 +9,15 @@ const _queueFull = 'queue_full';
 /// A queue replacement whose ids came to no tracks.
 const _noTracks = 'no_tracks';
 
+/// A favourite the server will not keep, which it refuses with a reason and
+/// no code of its own.
+const favoriteRefused = 'favorite_refused';
+
 /// A request the server refused in words meant for the user: an add past its
-/// queue limit, a replacement with no tracks, or on a demo server a change it
-/// never allows or too many changes at once. [toString] is the server's own
-/// sentence, so a call site that reports `'Could not …: $e'` reads correctly
-/// unchanged.
+/// queue limit, a replacement with no tracks, a favourite it will not keep,
+/// or on a demo server a change it never allows or too many changes at once.
+/// [toString] is the server's own sentence, so a call site that reports
+/// `'Could not …: $e'` reads correctly unchanged.
 class ServerRefusalException extends DioException {
   ServerRefusalException(DioException cause, this.code, this.reason)
     : super(
@@ -25,7 +29,8 @@ class ServerRefusalException extends DioException {
         message: reason,
       );
 
-  /// The server's `detail.code`, such as `queue_full` or `demo_read_only`.
+  /// The server's `detail.code`, such as `queue_full` or `demo_read_only`;
+  /// [favoriteRefused] where it sent none.
   final String code;
 
   final String reason;

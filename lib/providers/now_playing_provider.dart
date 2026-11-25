@@ -4,6 +4,7 @@ import '../data_model/data_model.dart';
 import '../utils/browse_links.dart';
 import '../utils/playback_utils.dart';
 import 'app_state_provider.dart';
+import 'favorites_provider.dart';
 import 'source_modules_provider.dart';
 
 /// The track the output is on: the queue's current entry, or the plugin's own
@@ -38,6 +39,20 @@ final nowPlayingMetadataLinksProvider =
         album: available(albumBrowseLink(track?.album)),
       );
     });
+
+/// The track Now Playing shows, by id, where it can be marked a favourite:
+/// it is the queue's rather than a plugin's stream, and its own source keeps
+/// favourites. Null otherwise.
+final nowPlayingFavoriteProvider = Provider<String?>((ref) {
+  if (ref.watch(playbackControlProvider.select((c) => c.isExclusive))) {
+    return null;
+  }
+  final id = ref.watch(nowPlayingTrackProvider.select((track) => track?.id));
+  return id != null &&
+          favoriteSourceOf(id, ref.watch(favoriteSourcesProvider)) != null
+      ? id
+      : null;
+});
 
 /// Length of what is playing. A plugin's stream reports its own, which the
 /// track it describes may not carry.
