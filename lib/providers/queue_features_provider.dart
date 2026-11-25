@@ -1,6 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../data_model/data_model.dart' show ModuleCapability;
+import '../data_model/data_model.dart' show ModuleCapability, Track;
 import 'app_state_provider.dart';
 import 'connection_state_provider.dart';
 import 'kalinka_player_api_provider.dart';
@@ -54,6 +54,19 @@ final dislikeAvailableProvider = Provider<bool>(
       ref.watch(nowPlayingTrackProvider.select((track) => track != null)),
 );
 
+/// Whether one of [sources] can suggest tracks to follow its own.
+bool _anyContinues(Ref ref, Set<String> sources) => ref.watch(
+  sourceModulesProvider.select(
+    (modules) =>
+        modules.value?.any(
+          (module) =>
+              sources.contains(module.name) &&
+              module.can(ModuleCapability.continuation),
+        ) ??
+        false,
+  ),
+);
+
 /// Whether tracks like the playing one can be asked for: the server queues
 /// them, and the playing track's own source can suggest them.
 final similarTracksAvailableProvider = Provider<bool>((ref) {
@@ -67,16 +80,28 @@ final similarTracksAvailableProvider = Provider<bool>((ref) {
       (track) => track == null ? null : sourceOfId(track.id),
     ),
   );
-  if (source == null) return false;
-  return ref.watch(
-    sourceModulesProvider.select(
-      (modules) =>
-          modules.value?.any(
-            (module) =>
-                module.name == source &&
-                module.can(ModuleCapability.continuation),
-          ) ??
-          false,
-    ),
+  return source != null && _anyContinues(ref, {source});
+});
+
+/// Whether the server's Keep playing is on, as the queue's state says: null
+/// from a server without the setting.
+final keepPlayingProvider = Provider<bool?>(
+  (ref) => ref.watch(playQueueStateStoreProvider.select((s) => s.keepPlaying)),
+);
+
+/// Whether turning Keep playing on would carry the queue on now: it is off,
+/// the queue stands at its last track or has played it out, and a source of
+/// one of its tracks can suggest what follows.
+final keepPlayingOfferedProvider = Provider<bool>((ref) {
+  if (ref.watch(keepPlayingProvider) != false) return false;
+  final ended = ref.watch(
+    playQueueStateStoreProvider.select((s) {
+      final index = s.playbackState.index;
+      return index != null && index >= s.trackList.length - 1
+          ? s.trackList
+          : const <Track>[];
+    }),
   );
+  final sources = {for (final track in ended) ?sourceOfId(track.id)};
+  return sources.isNotEmpty && _anyContinues(ref, sources);
 });

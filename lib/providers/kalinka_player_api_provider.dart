@@ -78,14 +78,20 @@ abstract class KalinkaPlayerProxy {
   Future<StatusMessage> stop();
   Future<TrackList> listTracks({int offset = 0, int limit = 100});
 
-  /// Turns the playing track down for this queue's session, steering autoplay
-  /// and similar tracks away from it, and skips it. False when nothing is
-  /// playing.
+  /// Turns the playing track down for this queue's session, steering Keep
+  /// playing and similar tracks away from it, and skips it. False when nothing
+  /// is playing.
   Future<bool> dislikeCurrent();
 
   /// Queues tracks like the playing one right after it, from its own source.
   /// Returns how many came: 0 where that source has none to offer.
   Future<int> addSimilarTracks();
+
+  /// Saves the server's Keep playing setting. Turned on where the queue
+  /// stands at its last track or has played it out, the server carries it on
+  /// at once and plays on; returns how many tracks that added, 0 where no
+  /// source had any or the queue had not run out.
+  Future<int> setKeepPlaying(bool enabled);
   Future<StatusMessage> setPlaybackMode({
     bool? repeatOne,
     bool? repeatAll,
@@ -600,6 +606,16 @@ class KalinkaPlayerProxyImpl implements KalinkaPlayerProxy {
   @override
   Future<int> addSimilarTracks() async {
     final response = await client.post('/queue/similar');
+    return statusMessageFromResponse(response).count ?? 0;
+  }
+
+  @override
+  Future<int> setKeepPlaying(bool enabled) async {
+    final response = await client.put(
+      '/queue/keep_playing',
+      data: {'enabled': enabled},
+      options: Options(contentType: Headers.jsonContentType),
+    );
     return statusMessageFromResponse(response).count ?? 0;
   }
 
