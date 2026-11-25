@@ -484,7 +484,6 @@ class _AlbumPageHeaderState extends State<AlbumPageHeader> {
             const SizedBox(height: 20),
             Wrap(
               spacing: 8,
-              crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 PlayAllChip(trackIds: [page.id!], trackCount: trackCount),
                 AddAllChip(
@@ -492,7 +491,6 @@ class _AlbumPageHeaderState extends State<AlbumPageHeader> {
                   trackCount: trackCount,
                   name: title,
                 ),
-                PageFavoriteButton(id: page.id!),
               ],
             ),
           ],
@@ -552,21 +550,34 @@ class _AlbumPageHeaderState extends State<AlbumPageHeader> {
                             ),
                           ),
                           const SizedBox(height: 8),
-                          Semantics(
-                            header: true,
-                            child: FittedTitle(
-                              title,
-                              // Keep long names within two display lines' height,
-                              // leaving the cover visible above the metadata.
-                              minFontSize: 20,
-                              lines: 2,
-                              style: KalinkaFonts.display(
-                                fontSize: titleSize,
-                                height: 1.12,
-                                letterSpacing: -0.7,
-                                fontWeight: FontWeight.w500,
-                                color: KalinkaColors.frost,
-                              ),
+                          Consumer(
+                            builder: (context, ref, _) => Row(
+                              children: [
+                                Expanded(
+                                  child: Semantics(
+                                    header: true,
+                                    child: FittedTitle(
+                                      title,
+                                      // Keep long names within two display
+                                      // lines' height, leaving the cover
+                                      // visible above the metadata.
+                                      minFontSize: 20,
+                                      lines: 2,
+                                      style: KalinkaFonts.display(
+                                        fontSize: titleSize,
+                                        height: 1.12,
+                                        letterSpacing: -0.7,
+                                        fontWeight: FontWeight.w500,
+                                        color: KalinkaColors.frost,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                if (watchCanFavorite(ref, page.id!)) ...[
+                                  const SizedBox(width: 8),
+                                  PageFavoriteButton(id: page.id!),
+                                ],
+                              ],
                             ),
                           ),
                           _measure(

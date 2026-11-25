@@ -94,6 +94,9 @@ class CatalogPageView extends ConsumerStatefulWidget {
   final ValueChanged<AlbumHeaderInsets>? onAlbumInsets;
 
   final ValueChanged<bool>? onHeaderCollapsed;
+
+  /// An artist's Grid/List has scrolled under the bar, or come back out.
+  final ValueChanged<bool>? onPresentationCollapsed;
   final ValueChanged<FolderActionsPlace>? onFolderActionsPlace;
   final ValueChanged<String?>? onCatalogSummary;
 
@@ -133,6 +136,7 @@ class CatalogPageView extends ConsumerStatefulWidget {
     this.onAlbumHeaderHeight,
     this.onAlbumInsets,
     this.onHeaderCollapsed,
+    this.onPresentationCollapsed,
     this.onFolderActionsPlace,
     this.onCatalogSummary,
     this.topBarInset = 0,
@@ -145,6 +149,23 @@ class CatalogPageView extends ConsumerStatefulWidget {
     this.titleInBar = false,
     this.searchInBar,
   });
+
+  /// The Grid/List choice an artist's page offers, once it is known to list
+  /// the artist's releases; null while it lists tracks or nothing yet.
+  static ListingLayout? artistPresentationOf(
+    WidgetRef ref,
+    SearchSessionState visit,
+  ) {
+    final page = visit.catalogPage;
+    if (!page.isArtist || page.id == null) return null;
+    final relations = ref.watch(artistRelationsProvider(page.id!)).value;
+    if (relations == null ||
+        _CatalogPageViewState._shownRelation(relations, visit) !=
+            ArtistRelation.albums) {
+      return null;
+    }
+    return _CatalogPageViewState._artistLayout(page.id!);
+  }
 
   /// The Grid/List choice a visit's listing offers, if any. Folders, albums
   /// and playlists list tracks, and a catalog of shelves lays them out
@@ -1093,14 +1114,10 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
     };
   }
 
-  /// The artist header's Pin and heart, which the bar takes over once they
-  /// have scrolled under it.
-  final _artistActions = GlobalKey();
-
-  /// How far down the artist's list their icons end, kept for once the
-  /// header has scrolled far enough to be dropped.
-  double? _artistActionsEnd;
-  bool? _artistActionsGone;
+  /// The artist header's Pin and heart, and its Grid/List, which the bar
+  /// takes over each once it has scrolled under it.
+  final _artistActions = _UnderBar(CatalogPinButton.iconSize);
+  final _artistPresentation = _UnderBar(kKalinkaPillHeight);
 
   bool _onArtistScroll(Notification notification) {
     final (depth, metrics) = switch (notification) {
@@ -1111,36 +1128,30 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
     if (depth != 0 || metrics == null || metrics.axis != Axis.vertical) {
       return false;
     }
-    // Where they sit in the list, not on screen: a scroll is told before
-    // the list is laid out again. One told while it is laid out goes by
-    // where they last were: the header may be on its way out of the tree.
     final building =
         SchedulerBinding.instance.schedulerPhase ==
         SchedulerPhase.persistentCallbacks;
-    final actions = building
-        ? null
-        : _artistActions.currentContext?.findRenderObject();
-    if (actions is RenderBox && actions.hasSize) {
-      if (RenderAbstractViewport.maybeOf(actions) case final viewport?) {
-        _artistActionsEnd =
-            viewport.getOffsetToReveal(actions, 0).offset +
-            (actions.size.height + CatalogPinButton.iconSize) / 2;
-      }
-    }
-    final end = _artistActionsEnd;
-    final gone = end != null && metrics.pixels >= end;
-    if (gone != _artistActionsGone) {
-      _artistActionsGone = gone;
-      // The bar takes them in the frame the page lets them go, unless that
-      // frame is being built.
+    void tell(bool? gone, ValueChanged<bool>? to) {
+      if (gone == null || to == null) return;
+      // The bar takes it in the frame the page lets it go, unless that frame
+      // is being built.
       if (building) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) widget.onHeaderCollapsed?.call(gone);
+          if (mounted) to(gone);
         });
       } else {
-        widget.onHeaderCollapsed?.call(gone);
+        to(gone);
       }
     }
+
+    tell(
+      _artistActions.passed(metrics.pixels, measure: !building),
+      widget.onHeaderCollapsed,
+    );
+    tell(
+      _artistPresentation.passed(metrics.pixels, measure: !building),
+      widget.onPresentationCollapsed,
+    );
     return false;
   }
 
@@ -1159,17 +1170,9 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
     final available =
         relations.value ??
         (relations.hasError ? ArtistRelation.values : const <ArtistRelation>[]);
-    final shown = available.contains(visit.artistTab)
-        ? visit.artistTab
-        : (available.firstOrNull ?? ArtistRelation.albums);
+    final shown = _shownRelation(available, visit);
     final releases = shown == ArtistRelation.albums;
-    // Kept under the artist: one artist's releases may read best as covers,
-    // another's as rows.
-    final layout = ListingLayout(
-      page.id!,
-      contentType: PreviewContentType.album,
-      byDefault: ListingPresentation.grid,
-    );
+    final layout = _artistLayout(page.id!);
     final grid =
         releases && watchPresentation(ref, layout) == ListingPresentation.grid;
     final header = AppKeyboardRegion(
@@ -1181,7 +1184,8 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
           ArtistPageHeader(
             page: page,
             presentation: releases && relations.hasValue ? layout : null,
-            actionsKey: _artistActions,
+            actionsKey: _artistActions.key,
+            presentationKey: _artistPresentation.key,
           ),
           if (available.length > 1)
             ArtistRelationTabs(
@@ -1326,6 +1330,23 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
 
   /// How [page] lays out, or the shelf it was narrowed to: that shelf's own
   /// listing, under its own id and as its own preview says.
+  /// Kept under the artist: one artist's releases may read best as covers,
+  /// another's as rows.
+  static ListingLayout _artistLayout(String artistId) => ListingLayout(
+    artistId,
+    contentType: PreviewContentType.album,
+    byDefault: ListingPresentation.grid,
+  );
+
+  /// What an artist's page shows of [available]: the visit's tab where it
+  /// has one, else the first.
+  static ArtistRelation _shownRelation(
+    List<ArtistRelation> available,
+    SearchSessionState visit,
+  ) => available.contains(visit.artistTab)
+      ? visit.artistTab
+      : (available.firstOrNull ?? ArtistRelation.albums);
+
   static ListingLayout? _layoutOf(CatalogPage page, SearchType? shelf) {
     final id = page.id;
     if (id == null) return null;
@@ -1683,6 +1704,42 @@ class _FolderHeader extends StatelessWidget {
           ),
       ],
     );
+  }
+}
+
+/// One of the artist header's controls, by where it ends down the list: past
+/// that, the list has scrolled it under the bar.
+class _UnderBar {
+  _UnderBar(this.glyph);
+
+  /// How tall the control's visible face is, centred in its box.
+  final double glyph;
+
+  final key = GlobalKey();
+
+  /// Where it ends, kept for once the header has scrolled far enough to be
+  /// dropped.
+  double? _end;
+  bool? _gone;
+
+  /// Whether the list at [pixels] has passed it, where that has changed;
+  /// null otherwise. Where it sits in the list, not on screen: a scroll is
+  /// told before the list is laid out again. Without [measure], while a
+  /// frame is built, it goes by where it last was: the header may be on its
+  /// way out of the tree.
+  bool? passed(double pixels, {required bool measure}) {
+    final box = measure ? key.currentContext?.findRenderObject() : null;
+    if (box is RenderBox && box.hasSize) {
+      if (RenderAbstractViewport.maybeOf(box) case final viewport?) {
+        _end =
+            viewport.getOffsetToReveal(box, 0).offset +
+            (box.size.height + glyph) / 2;
+      }
+    }
+    final end = _end;
+    final gone = end != null && pixels >= end;
+    if (gone == _gone) return null;
+    return _gone = gone;
   }
 }
 

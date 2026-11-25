@@ -277,9 +277,10 @@ class _CatalogSliverHeaderState extends ConsumerState<CatalogSliverHeader> {
             _naturalTitleWidth = lineWidth(page.title ?? '', titleStyle);
           }
           final available = width - 32;
-          // Pin and the heart, each a 48dp target, 8dp after the title.
+          // Pin after the title and the heart at the row's end, each a 48dp
+          // target 8dp from what it follows.
           final marks = (pin ? 1 : 0) + (favorable ? 1 : 0);
-          final marksWidth = marks == 0 ? 0.0 : 8.0 + 48 * marks;
+          final marksWidth = 56.0 * marks;
           // Play all, Enqueue and Up one folder, and on storage the library
           // and eject pills.
           final folderActions = widget.actions == null
@@ -469,36 +470,46 @@ class _CatalogSliverHeaderState extends ConsumerState<CatalogSliverHeader> {
                               child: Row(
                                 key: const ValueKey('catalog-identity'),
                                 children: [
-                                  Flexible(
-                                    child: Semantics(
-                                      header: true,
-                                      child: Text(
-                                        page.title ?? '',
-                                        key: const ValueKey(
-                                          'catalog-expanded-title',
+                                  Expanded(
+                                    child: Row(
+                                      children: [
+                                        Flexible(
+                                          child: Semantics(
+                                            header: true,
+                                            child: Text(
+                                              page.title ?? '',
+                                              key: const ValueKey(
+                                                'catalog-expanded-title',
+                                              ),
+                                              style: titleStyle,
+                                              maxLines: 2,
+                                              overflow: TextOverflow.ellipsis,
+                                              // Pin follows the longest
+                                              // line, not the room the title
+                                              // was offered.
+                                              textWidthBasis:
+                                                  TextWidthBasis.longestLine,
+                                            ),
+                                          ),
                                         ),
-                                        style: titleStyle,
-                                        maxLines: 2,
-                                        overflow: TextOverflow.ellipsis,
-                                        // Pin follows the longest line, not
-                                        // the room the title was offered.
-                                        textWidthBasis:
-                                            TextWidthBasis.longestLine,
-                                      ),
+                                        if (pin) ...[
+                                          const SizedBox(width: 8),
+                                          SizedBox(
+                                            width: 48,
+                                            height: 48,
+                                            child: CatalogPinButton(
+                                              page: page,
+                                              filter: widget.query,
+                                            ),
+                                          ),
+                                        ],
+                                      ],
                                     ),
                                   ),
-                                  if (marks > 0) const SizedBox(width: 8),
-                                  if (pin)
-                                    SizedBox(
-                                      width: 48,
-                                      height: 48,
-                                      child: CatalogPinButton(
-                                        page: page,
-                                        filter: widget.query,
-                                      ),
-                                    ),
-                                  if (favorable)
+                                  if (favorable) ...[
+                                    const SizedBox(width: 8),
                                     PageFavoriteButton(id: page.id!),
+                                  ],
                                 ],
                               ),
                             ),

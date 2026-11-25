@@ -17,6 +17,7 @@ import '../../providers/catalog_sources_provider.dart';
 import '../../providers/collection_edit_provider.dart';
 import '../../providers/connection_state_provider.dart';
 import '../../providers/indexer_status_provider.dart';
+import '../../providers/listing_presentation_provider.dart' show ListingLayout;
 import '../../providers/pinned_catalogs_provider.dart';
 import '../../providers/search_session_provider.dart';
 import '../../providers/source_modules_provider.dart';
@@ -238,6 +239,9 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
   // Each with the layout it was built for, as a record of what it depends on.
   final _visitPages = <int, (SearchSessionState, Record, Widget)>{};
   final _catalogHeadersCollapsed = <int, bool>{};
+
+  /// Visits whose artist's Grid/List has scrolled under the bar.
+  final _artistPresentationsCollapsed = <int, bool>{};
   // Kept with the folder it was reported for: one shown in its place in the
   // same visit starts with its actions in its header.
   final _folderActionsPlaces =
@@ -1159,6 +1163,7 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
     _visitPages.removeWhere((id, _) => !kept.contains(id));
     _folderActionKeys.removeWhere((id, _) => !kept.contains(id));
     _catalogHeadersCollapsed.removeWhere((id, _) => !kept.contains(id));
+    _artistPresentationsCollapsed.removeWhere((id, _) => !kept.contains(id));
     _folderActionsPlaces.removeWhere((id, _) => !kept.contains(id));
     _catalogSummaries.removeWhere((id, _) => !kept.contains(id));
     return Stack(
@@ -1383,6 +1388,11 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
           onHeaderCollapsed: (collapsed) {
             if (_catalogHeadersCollapsed[id] == collapsed) return;
             _catalogHeadersCollapsed[id] = collapsed;
+            if (mounted && _isShown(id)) setState(() {});
+          },
+          onPresentationCollapsed: (collapsed) {
+            if (_artistPresentationsCollapsed[id] == collapsed) return;
+            _artistPresentationsCollapsed[id] = collapsed;
             if (mounted && _isShown(id)) setState(() {});
           },
           onFolderActionsPlace: (place) {
@@ -1872,6 +1882,18 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
                         Expanded(
                           child: _buildTitle(session, overAlbum: overAlbum),
                         ),
+                        // An artist's Grid/List comes in left of Pin and the
+                        // heart, so neither moves when it does.
+                        if (_barArtistPresentation(
+                              session,
+                              width:
+                                  constraints.maxWidth +
+                                  browseToolbarPadding.horizontal,
+                            )
+                            case final presentation?) ...[
+                          presentation,
+                          const SizedBox(width: 12),
+                        ],
                         // What joins the bar on scroll comes in before what is always
                         // there, so Search and Grid/List never move under a finger.
                         if ((catalogChrome ||
@@ -2083,16 +2105,43 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
   Widget? _barPresentation(
     SearchSessionState session, {
     required double width,
-  }) {
-    final layout = CatalogPageView.presentationLayoutOf(session);
-    if (layout == null) return null;
-    final scale = MediaQuery.textScalerOf(context).scale(16) / 16;
-    return PresentationToggle(
+  }) => switch (CatalogPageView.presentationLayoutOf(session)) {
+    final layout? => _presentationToggle(
+      layout,
+      width: width,
       key: const ValueKey('catalog-bar-presentation'),
-      layout: layout,
-      compact: width < 600 * scale,
-    );
+    ),
+    null => null,
+  };
+
+  /// An artist's Grid/List, once it has scrolled under the bar.
+  Widget? _barArtistPresentation(
+    SearchSessionState session, {
+    required double width,
+  }) {
+    if (session.activeView == FindMusicView.results ||
+        _artistPresentationsCollapsed[session.visitId] != true) {
+      return null;
+    }
+    return switch (CatalogPageView.artistPresentationOf(ref, session)) {
+      final layout? => _presentationToggle(
+        layout,
+        width: width,
+        key: const ValueKey('artist-bar-presentation'),
+      ),
+      null => null,
+    };
   }
+
+  Widget _presentationToggle(
+    ListingLayout layout, {
+    required double width,
+    required Key key,
+  }) => PresentationToggle(
+    key: key,
+    layout: layout,
+    compact: width < 600 * MediaQuery.textScalerOf(context).scale(16) / 16,
+  );
 
   /// The bar's search opens below it, bounded to the inline field's maximum
   /// width. The same field and focus survive moves between the two positions.

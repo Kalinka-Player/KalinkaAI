@@ -10,6 +10,8 @@ import 'package:kalinka/providers/server_refusal.dart';
 import 'package:kalinka/providers/source_modules_provider.dart';
 import 'package:kalinka/providers/toast_provider.dart';
 import 'package:kalinka/theme/app_theme.dart';
+import 'package:kalinka/widgets/browse_filters/presentation_toggle.dart';
+import 'package:kalinka/widgets/fitted_title.dart';
 import 'package:kalinka/widgets/home/catalog_pin_button.dart';
 import 'package:kalinka/widgets/search/album_page_header.dart';
 import 'package:kalinka/widgets/search/artist_page_header.dart';
@@ -143,6 +145,9 @@ Color? _heartColor(WidgetTester tester) => tester
     .style!
     .color;
 
+/// An artist's Grid/List once the bar has taken it.
+final _barPresentation = find.byKey(const ValueKey('artist-bar-presentation'));
+
 /// A control still in the page's header, not the bar's.
 Finder _inPage(Finder matching) =>
     find.descendant(of: find.byType(CatalogPageView), matching: matching);
@@ -240,7 +245,7 @@ void main() {
       await captureForReview(tester, key, 'favourites-album-wide');
     });
 
-    testWidgets('follows them under the cover on a phone', (tester) async {
+    testWidgets('ends the title\'s line on a phone', (tester) async {
       final api = _Api()..favorites.add('kalinka:qobuz:album:midnight');
       final key = GlobalKey();
       await _pump(
@@ -253,13 +258,18 @@ void main() {
 
       final header = find.byType(AlbumPageHeader);
       final heart = tester.getRect(_heart);
+      final title = tester.getRect(
+        find.descendant(of: header, matching: find.byType(FittedTitle)),
+      );
       final enqueue = tester.getRect(
         find.descendant(of: header, matching: find.byType(AddAllChip)),
       );
       expect(find.descendant(of: header, matching: _heart), findsOneWidget);
       expect(heart.size, const Size.square(48));
-      expect(heart.left, closeTo(enqueue.right + 8, 0.01));
-      expect(heart.center.dy, closeTo(enqueue.center.dy, 0.01));
+      expect(heart.right, closeTo(tester.getRect(header).right - 16, 0.01));
+      expect(heart.left, greaterThanOrEqualTo(title.right + 8));
+      expect(heart.center.dy, closeTo(title.center.dy, 0.01));
+      expect(heart.bottom, lessThan(enqueue.top));
       expect(_remove, findsOneWidget);
       expect(
         find.descendant(
@@ -296,17 +306,30 @@ void main() {
   });
 
   group('an artist\'s heart', () {
-    testWidgets('stands beside Pin and joins the bar with it', (tester) async {
+    testWidgets('ends the name\'s line and joins the bar with Pin', (
+      tester,
+    ) async {
       final api = _Api();
       final key = GlobalKey();
       await _pump(tester, _artist('qobuz'), api: api, captureKey: key);
 
       final header = find.byType(ArtistPageHeader);
       final pin = find.byType(CatalogPinButton).hitTestable();
+      final name = tester.getRect(
+        find.descendant(of: header, matching: find.text('Night traveller')),
+      );
       expect(find.descendant(of: header, matching: _heart), findsOneWidget);
       expect(find.descendant(of: header, matching: pin), findsOneWidget);
       expect(tester.getSize(_heart), const Size.square(48));
-      expect(tester.getRect(_heart).left, tester.getRect(pin).right);
+      expect(
+        tester.getRect(_heart).right,
+        closeTo(tester.getRect(header).right - 16, 0.01),
+      );
+      expect(tester.getRect(pin).left, closeTo(name.right + 8, 0.01));
+      expect(
+        tester.getRect(_heart).left,
+        greaterThan(tester.getRect(pin).right),
+      );
       expect(tester.getRect(_heart).center.dy, tester.getRect(pin).center.dy);
       await captureForReview(tester, key, 'favourites-artist-wide');
 
@@ -314,11 +337,17 @@ void main() {
       final position = tester.state<ScrollableState>(_scrollable).position;
       position.jumpTo(600);
       await tester.pumpAndSettle();
+      final status = tester.getRect(find.byType(ServerChip).first);
       expect(find.descendant(of: header, matching: _heart), findsNothing);
       expect(_heart, findsOneWidget);
       expect(pin, findsOneWidget);
       expect(tester.getRect(_heart).center.dy, back);
       expect(tester.getRect(_heart).left, tester.getRect(pin).right);
+      expect(tester.getRect(_heart).right, lessThanOrEqualTo(status.left));
+      // Grid/List joins too, left of Pin, so the heart stays at the right.
+      final grid = tester.getRect(_barPresentation);
+      expect(grid.right, lessThanOrEqualTo(tester.getRect(pin).left));
+      expect(grid.center.dy, closeTo(back, 0.01));
       await captureForReview(tester, key, 'favourites-artist-wide-collapsed');
 
       await tester.tap(_heart);
@@ -330,7 +359,44 @@ void main() {
       expect(find.descendant(of: header, matching: _heart), findsOneWidget);
       expect(_heart, findsOneWidget);
       expect(_remove, findsOneWidget);
+      expect(_barPresentation, findsNothing);
       expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('leaves Grid/List in the header until it is under the bar', (
+      tester,
+    ) async {
+      await _pump(tester, _artist('qobuz'));
+
+      final header = find.byType(ArtistPageHeader);
+      final position = tester.state<ScrollableState>(_scrollable).position;
+      double? heartJoined;
+      for (var offset = 0.0; offset <= 600; offset += 4) {
+        position.jumpTo(offset);
+        await tester.pump();
+        await tester.pump();
+        final heartInBar = find
+            .descendant(of: header, matching: _heart)
+            .evaluate()
+            .isEmpty;
+        final gridInBar = _barPresentation.evaluate().isNotEmpty;
+        if (heartInBar) heartJoined ??= offset;
+        if (gridInBar) {
+          // Pin and the heart went first, a little further up the page.
+          expect(heartJoined, isNotNull);
+          expect(offset, greaterThan(heartJoined!));
+          expect(
+            find.descendant(
+              of: header,
+              matching: find.byType(PresentationToggle),
+            ),
+            findsOneWidget,
+          );
+          expect(tester.takeException(), isNull);
+          return;
+        }
+      }
+      fail('Grid/List never joined the bar');
     });
 
     testWidgets('joins the bar on its own where the artist cannot be pinned', (
@@ -383,7 +449,7 @@ void main() {
 
   group('a playlist\'s heart', () {
     for (final (size, name) in [(_wide, 'wide'), (_phone, 'phone')]) {
-      testWidgets('stands beside the title and joins the bar, $name', (
+      testWidgets('ends the title\'s line and joins the bar, $name', (
         tester,
       ) async {
         final api = _Api()
@@ -406,7 +472,17 @@ void main() {
         expect(_inPage(_heart), findsOneWidget);
         expect(_heart, findsOneWidget);
         expect(tester.getSize(_heart), const Size.square(48));
-        expect(tester.getRect(_heart).left, closeTo(title.right + 8, 0.01));
+        expect(
+          tester.getRect(_heart).right,
+          closeTo(
+            tester.getRect(find.byType(CatalogPageView)).right - 16,
+            0.01,
+          ),
+        );
+        expect(
+          tester.getRect(_heart).left,
+          greaterThanOrEqualTo(title.right + 8),
+        );
         expect(
           tester.getRect(_heart).center.dy,
           closeTo(title.center.dy, 0.01),
@@ -440,6 +516,9 @@ void main() {
         expect(api.marked, ['kalinka:qobuz:playlist:evening']);
 
         position.jumpTo(0);
+        await tester.pumpAndSettle();
+        // Android's fast scroller holds the trailing edge until it rests.
+        await tester.pump(const Duration(seconds: 2));
         await tester.pumpAndSettle();
         expect(_inPage(_heart), findsOneWidget);
         expect(_remove, findsOneWidget);
