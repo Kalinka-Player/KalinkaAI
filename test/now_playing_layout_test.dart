@@ -196,9 +196,10 @@ PlayQueueState _queue({
 
 /// The thumb-down and the heart beside [title] where [dislike] and [favorite]
 /// say they show, each a whole 48dp target inside the window, its top at the
-/// title's top. Flush left they follow the title, thumb-down first; else the
-/// thumb-down comes before it and the heart after it, and the title keeps the
-/// centre of the details whichever shows. A short window scales the
+/// title's top, at the details' edges however long the title is. Flush left
+/// they follow the title at the right edge, thumb-down first; else the
+/// thumb-down holds the left edge and the heart the right, and the title
+/// keeps the centre of the details whichever shows. A short window scales the
 /// presentation they sit in down, so their size is measured in its own terms.
 void _expectTitleActions(
   WidgetTester tester,
@@ -225,21 +226,31 @@ void _expectTitleActions(
     );
     shown.add(bounds);
   }
+  final details = tester.getRect(_metadata);
+  if (shown.isNotEmpty) {
+    final box = tester.renderObject<RenderBox>(_metadata);
+    expect(box.size.width, closeTo(box.constraints.maxWidth, 0.5));
+  }
   if (leftAligned) {
     var after = text.right;
     for (final bounds in shown) {
       expect(bounds.left, greaterThanOrEqualTo(after));
       after = bounds.right;
     }
+    if (shown.isNotEmpty) expect(after, closeTo(details.right, 0.5));
     return;
   }
   if (dislike) {
-    expect(tester.getRect(_dislike).right, lessThanOrEqualTo(text.left));
+    final bounds = tester.getRect(_dislike);
+    expect(bounds.right, lessThanOrEqualTo(text.left));
+    expect(bounds.left, closeTo(details.left, 0.5));
   }
   if (favorite) {
-    expect(tester.getRect(_heart).left, greaterThanOrEqualTo(text.right));
+    final bounds = tester.getRect(_heart);
+    expect(bounds.left, greaterThanOrEqualTo(text.right));
+    expect(bounds.right, closeTo(details.right, 0.5));
   }
-  expect(text.center.dx, closeTo(tester.getCenter(_metadata).dx, 0.5));
+  expect(text.center.dx, closeTo(details.center.dx, 0.5));
 }
 
 Future<ProviderContainer> _pump(

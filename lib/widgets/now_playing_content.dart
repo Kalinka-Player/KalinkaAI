@@ -726,24 +726,24 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
         : null,
   );
 
-  /// The title with [_titleActions]: after it, thumb-down first, where the
-  /// details are flush left; else the thumb-down before it and the heart after
-  /// it, in slots of one width, so the title keeps the centre with only one
-  /// of them. Their tops meet the title's top.
+  /// The title with [_titleActions] at the details' edges, however long the
+  /// title is: both at the right edge, thumb-down first, where the details
+  /// are flush left; else the thumb-down at the left edge and the heart at the
+  /// right, in slots of one width, so the title keeps the centre with only
+  /// one of them. Their tops meet the title's top.
   Widget _titleWithActions(Widget title, {required bool leftAligned}) {
     final (:dislike, :favorite) = _titleActions();
     if (dislike == null && favorite == null) return title;
     const gap = SizedBox(width: _TitleAction.gap);
     const empty = SizedBox(width: _TitleAction.size);
     return Row(
-      mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: leftAligned
-          ? [Flexible(child: title), gap, ?dislike, ?favorite]
+          ? [Expanded(child: title), gap, ?dislike, ?favorite]
           : [
               dislike ?? empty,
               gap,
-              Flexible(child: title),
+              Expanded(child: title),
               gap,
               favorite ?? empty,
             ],
