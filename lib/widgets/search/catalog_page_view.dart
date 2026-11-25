@@ -15,6 +15,7 @@ import '../../providers/box_control_provider.dart';
 import '../../providers/collection_edit_provider.dart';
 import '../../providers/collections_provider.dart';
 import '../../providers/connection_settings_provider.dart';
+import '../../providers/favorites_provider.dart';
 import '../../providers/indexer_status_provider.dart';
 import '../../providers/kalinka_player_api_provider.dart';
 import '../../providers/listing_presentation_provider.dart';
@@ -380,7 +381,7 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
         : 0;
     ref.listen(collectionsRevisionProvider, (_, _) => _artPolls = 0);
     // Recomputed per chunk, not per row (O(n²) otherwise).
-    final trackIdsMemo = _TrackIdsMemo();
+    final trackIdsMemo = _TrackIdsMemo(ref.watch(favoriteSourcesProvider));
 
     final notifier = ref.read(searchSessionProvider.notifier);
     void setQuery(BrowseFilterQuery next) {
@@ -656,6 +657,7 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
               trackIdsMemo.details(loaded),
               trackIdsMemo.artists(loaded),
               trackIdsMemo.tracksOnly(loaded),
+              trackIdsMemo.favorites(loaded),
             ),
       // No horizontal list padding — the banner bleeds edge to edge; rows and
       // separators carry their own 16px inset instead.
@@ -750,6 +752,7 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
             _GridTrack(
               item: item,
               queueContextIds: trackIds.isEmpty ? null : trackIds,
+              favorites: trackIdsMemo.favorites(loaded),
             ),
           );
         }
@@ -819,6 +822,7 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
             artists: trackIdsMemo.artists(loaded),
             tracks: trackIdsMemo.tracksOnly(loaded),
             hideTrackType: trackIdsMemo.tracksOnly(loaded),
+            favorites: trackIdsMemo.favorites(loaded),
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: heading == null && titles == null
@@ -1089,14 +1093,14 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
     };
   }
 
-  /// The artist header's Pin, which the bar takes over once it has
-  /// scrolled under it.
-  final _artistPin = GlobalKey();
+  /// The artist header's Pin and heart, which the bar takes over once they
+  /// have scrolled under it.
+  final _artistActions = GlobalKey();
 
-  /// How far down the artist's list the Pin's icon ends, kept for once the
+  /// How far down the artist's list their icons end, kept for once the
   /// header has scrolled far enough to be dropped.
-  double? _artistPinEnd;
-  bool? _artistPinGone;
+  double? _artistActionsEnd;
+  bool? _artistActionsGone;
 
   bool _onArtistScroll(Notification notification) {
     final (depth, metrics) = switch (notification) {
@@ -1107,24 +1111,29 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
     if (depth != 0 || metrics == null || metrics.axis != Axis.vertical) {
       return false;
     }
-    // Where it sits in the list, not on screen: a scroll is told before
-    // the list is laid out again.
-    final pin = _artistPin.currentContext?.findRenderObject();
-    if (pin is RenderBox && pin.hasSize) {
-      if (RenderAbstractViewport.maybeOf(pin) case final viewport?) {
-        _artistPinEnd =
-            viewport.getOffsetToReveal(pin, 0).offset +
-            (pin.size.height + CatalogPinButton.iconSize) / 2;
+    // Where they sit in the list, not on screen: a scroll is told before
+    // the list is laid out again. One told while it is laid out goes by
+    // where they last were: the header may be on its way out of the tree.
+    final building =
+        SchedulerBinding.instance.schedulerPhase ==
+        SchedulerPhase.persistentCallbacks;
+    final actions = building
+        ? null
+        : _artistActions.currentContext?.findRenderObject();
+    if (actions is RenderBox && actions.hasSize) {
+      if (RenderAbstractViewport.maybeOf(actions) case final viewport?) {
+        _artistActionsEnd =
+            viewport.getOffsetToReveal(actions, 0).offset +
+            (actions.size.height + CatalogPinButton.iconSize) / 2;
       }
     }
-    final end = _artistPinEnd;
+    final end = _artistActionsEnd;
     final gone = end != null && metrics.pixels >= end;
-    if (gone != _artistPinGone) {
-      _artistPinGone = gone;
-      // The bar takes it in the frame the page lets it go, unless that frame
-      // is being built.
-      if (SchedulerBinding.instance.schedulerPhase ==
-          SchedulerPhase.persistentCallbacks) {
+    if (gone != _artistActionsGone) {
+      _artistActionsGone = gone;
+      // The bar takes them in the frame the page lets them go, unless that
+      // frame is being built.
+      if (building) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) widget.onHeaderCollapsed?.call(gone);
         });
@@ -1172,7 +1181,7 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
           ArtistPageHeader(
             page: page,
             presentation: releases && relations.hasValue ? layout : null,
-            pinKey: _artistPin,
+            actionsKey: _artistActions,
           ),
           if (available.length > 1)
             ArtistRelationTabs(
@@ -1194,7 +1203,7 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
       );
     }
     final scale = MediaQuery.textScalerOf(context).scale(16) / 16;
-    final trackIdsMemo = _TrackIdsMemo();
+    final trackIdsMemo = _TrackIdsMemo(ref.watch(favoriteSourcesProvider));
     return LayoutBuilder(
       builder: (context, constraints) {
         final width = constraints.maxWidth;
@@ -1235,6 +1244,7 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
             trackIdsMemo.details(loaded),
             trackIdsMemo.artists(loaded),
             trackIdsMemo.tracksOnly(loaded),
+            trackIdsMemo.favorites(loaded),
           ),
           separatorBuilder: (context, _, above) => Padding(
             padding: EdgeInsets.only(
@@ -1254,6 +1264,7 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
               return _GridTrack(
                 item: item,
                 queueContextIds: trackIds.isEmpty ? null : trackIds,
+                favorites: trackIdsMemo.favorites(loaded),
               );
             }
             final row = BrowseItemRows.buildRow(
@@ -1263,6 +1274,7 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
             return RowColumnsListing(
               details: trackIdsMemo.details(loaded),
               artists: trackIdsMemo.artists(loaded),
+              favorites: trackIdsMemo.favorites(loaded),
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: index == 0
@@ -1563,7 +1575,14 @@ class _GridTrack extends StatelessWidget {
   final BrowseItem item;
   final List<String>? queueContextIds;
 
-  const _GridTrack({required this.item, this.queueContextIds});
+  /// Whether any track of the listing can be marked a favourite.
+  final bool favorites;
+
+  const _GridTrack({
+    required this.item,
+    this.queueContextIds,
+    required this.favorites,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1576,7 +1595,11 @@ class _GridTrack extends StatelessWidget {
         ArtworkGridCard.inset - 8,
         ArtworkGridCard.inset,
       ),
-      child: SearchTrackRow(item: item, queueContextIds: queueContextIds),
+      child: RowColumnsListing(
+        details: true,
+        favorites: favorites,
+        child: SearchTrackRow(item: item, queueContextIds: queueContextIds),
+      ),
     );
   }
 }
@@ -1666,6 +1689,11 @@ class _FolderHeader extends StatelessWidget {
 /// Caches the queue-context track ids per loaded-chunk count, so row builds
 /// share one list instead of rescanning all loaded items each time.
 class _TrackIdsMemo {
+  _TrackIdsMemo(this.keepingFavorites);
+
+  /// The sources that keep favourites.
+  final Set<String> keepingFavorites;
+
   bool _tracksOnly = false;
   int _tracksForLength = -1;
 
@@ -1718,6 +1746,18 @@ class _TrackIdsMemo {
       _artists = RowColumnsListing.anyArtists(loaded);
     }
     return _artists;
+  }
+
+  bool _favorites = false;
+  int _favoritesForLength = -1;
+
+  /// Whether any loaded track can be marked a favourite.
+  bool favorites(List<BrowseItem> loaded) {
+    if (loaded.length != _favoritesForLength) {
+      _favoritesForLength = loaded.length;
+      _favorites = RowColumnsListing.anyFavorites(loaded, keepingFavorites);
+    }
+    return _favorites;
   }
 
   List<int> _albumNumbers = const [];

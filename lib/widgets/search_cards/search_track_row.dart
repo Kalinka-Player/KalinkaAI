@@ -11,6 +11,7 @@ import '../../providers/url_resolver.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/playback_utils.dart';
 import '../../utils/web_build_target.dart';
+import '../favorite_toggle.dart';
 import '../modifier_click.dart';
 import '../source_badge.dart';
 import '../swipe_to_act_row.dart';
@@ -19,6 +20,7 @@ import '../track_tile_layout.dart';
 import 'long_press_ring_painter.dart';
 import 'row_columns.dart';
 import 'row_enqueue_button.dart';
+import 'row_favorite_button.dart';
 import 'track_row_support.dart';
 
 /// Track row for search results.
@@ -27,6 +29,8 @@ import 'track_row_support.dart';
 /// row belongs to becomes the queue, playhead on the tapped track.
 /// Swipe right = add to queue / play next; a wide row also has a + for the
 /// former. Long-press row, or Ctrl/⌘-click it, = enter multi-select.
+/// A heart after the time marks the track a favourite, where its source
+/// keeps them.
 class SearchTrackRow extends ConsumerStatefulWidget {
   final BrowseItem item;
 
@@ -82,7 +86,7 @@ class SearchTrackRow extends ConsumerStatefulWidget {
 }
 
 class _SearchTrackRowState extends ConsumerState<SearchTrackRow>
-    with SingleTickerProviderStateMixin, LongPressRingMixin {
+    with SingleTickerProviderStateMixin, LongPressRingMixin, FavoriteMarking {
   late final AnimationController _flashController;
   late final Animation<Color?> _flashColorAnim;
   bool _tappedToPlay = false;
@@ -216,6 +220,9 @@ class _SearchTrackRowState extends ConsumerState<SearchTrackRow>
     final selectionMode = ref.watch(
       selectionStateProvider.select((s) => s.isActive),
     );
+    final favorite = RowColumnsListing.favoritesOf(context)
+        ? watchFavorite(widget.item.id)
+        : null;
 
     final track = widget.item.track;
     final title = track?.title ?? widget.item.name ?? 'Unknown';
@@ -311,13 +318,15 @@ class _SearchTrackRowState extends ConsumerState<SearchTrackRow>
       ),
     );
 
-    Widget tileFor(RowColumns columns, {required bool wide}) {
+    Widget tileFor(RowColumns measured) {
+      final columns = columnsAllowed ? measured : RowColumns.none;
       final ends = TrackRowTrailing(duration: duration, current: showBars);
       final enqueue = !selectionMode && widget.item.canAdd;
-      // The + ends a wide row, after the time. Where it is hidden its room
-      // stays, so times keep in line under TIME. In a column slot the time
-      // and bars give way to it rather than overflow.
-      Widget withEnqueue(Widget ends, {required bool bounded}) => Row(
+      // After the time come the heart, where the listing keeps room for
+      // one, and on a wide row the +. Where either is hidden its room stays,
+      // so times keep in line under TIME. In a column slot the time and bars
+      // give way to them rather than overflow.
+      Widget withControls(Widget ends, {required bool bounded}) => Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           if (bounded)
@@ -330,23 +339,44 @@ class _SearchTrackRowState extends ConsumerState<SearchTrackRow>
             )
           else
             ends,
-          const SizedBox(width: RowEnqueueButton.gap),
-          if (enqueue)
-            RowEnqueueButton(item: widget.item)
-          else
-            const SizedBox(width: RowEnqueueButton.size),
+          SizedBox(
+            width: measured.afterTime,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                if (measured.favorites)
+                  if (favorite != null && !selectionMode)
+                    RowFavoriteButton(
+                      mark: favorite,
+                      size: measured.favoriteSize,
+                    )
+                  else
+                    SizedBox.square(dimension: measured.favoriteSize),
+                if (measured.favorites && measured.wide)
+                  const SizedBox(width: RowColumns.favoriteGap),
+                if (measured.wide)
+                  if (enqueue)
+                    RowEnqueueButton(item: widget.item)
+                  else
+                    const SizedBox(width: RowEnqueueButton.size),
+              ],
+            ),
+          ),
         ],
       );
+      final controls = measured.afterTime > 0;
+      // A narrow row's heart is a whole touch target, taller than the cover:
+      // the row's padding gives up the difference, so its height stays.
+      final vertical =
+          (widget.compact && inAlbum ? 4.0 : kTrackTileVerticalPadding) -
+          (measured.favorites
+              ? (measured.favoriteSize - kTrackTileArtworkSize) / 2
+              : 0.0);
       return TrackTileLayout(
         // Match the album/artist rows' 3px artwork inset — the default
         // TrackTileLayout left padding (12) pushed track artwork out of line.
         // Right 8 lands the duration on the chevrons'/chips' right edge.
-        padding: EdgeInsets.fromLTRB(
-          3,
-          widget.compact && inAlbum ? 4 : kTrackTileVerticalPadding,
-          8,
-          widget.compact && inAlbum ? 4 : kTrackTileVerticalPadding,
-        ),
+        padding: EdgeInsets.fromLTRB(3, vertical, 8, vertical),
         leadingStartSpacing: 0,
         leading: Stack(
           children: [
@@ -471,10 +501,10 @@ class _SearchTrackRowState extends ConsumerState<SearchTrackRow>
             ? RowTrailing(
                 columns: columns,
                 inset: 16,
-                child: wide ? withEnqueue(ends, bounded: true) : ends,
+                child: controls ? withControls(ends, bounded: true) : ends,
               )
-            : wide
-            ? withEnqueue(ends, bounded: false)
+            : controls
+            ? withControls(ends, bounded: false)
             : duration != null || showBars
             ? ends
             : null,
@@ -484,10 +514,7 @@ class _SearchTrackRowState extends ConsumerState<SearchTrackRow>
     // Folder rows keep their cover, so the number gets a column before it.
     final tileChild = RowColumnsScope(
       builder: (context, measured) {
-        final tile = tileFor(
-          columnsAllowed ? measured : RowColumns.none,
-          wide: measured.wide,
-        );
+        final tile = tileFor(measured);
         if (widget.folderTrackNumber == null) return tile;
         return Row(
           children: [
@@ -603,6 +630,8 @@ class _SearchTrackRowState extends ConsumerState<SearchTrackRow>
                       addTrackToQueue(widget.item),
                   CustomSemanticsAction(label: 'Play next'): () =>
                       playTrackNext(widget.item),
+                  if (favorite case FavoriteMark(:final label, :final toggle?))
+                    CustomSemanticsAction(label: label): toggle,
                 },
           child: row,
         ),

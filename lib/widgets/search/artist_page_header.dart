@@ -10,9 +10,11 @@ import '../../providers/url_resolver.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/web_build_target.dart';
 import '../browse_filters/presentation_toggle.dart';
+import '../favorite_toggle.dart';
 import '../home/catalog_pin_button.dart';
 import '../procedural_album_art.dart';
 import '../source_badge.dart';
+import 'page_favorite_button.dart';
 
 /// Who an artist page is about: the portrait (or its stand-in), the name,
 /// where the artist comes from, and how many releases the source counts.
@@ -23,15 +25,19 @@ class ArtistPageHeader extends ConsumerWidget {
   /// foot; one switching button where the pane is narrow.
   final ListingLayout? presentation;
 
-  /// On the Pin, so the page can tell when it has scrolled under the bar.
-  final Key? pinKey;
+  /// On the Pin and the heart beside the name, so the page can tell when
+  /// they have scrolled under the bar.
+  final Key? actionsKey;
 
   const ArtistPageHeader({
     super.key,
     required this.page,
     this.presentation,
-    this.pinKey,
+    this.actionsKey,
   });
+
+  /// The least a name keeps beside Pin and the heart, before text scaling.
+  static const _nameRoom = 120.0;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -46,6 +52,7 @@ class ArtistPageHeader extends ConsumerWidget {
     final pin = !ref
         .watch(builtinSourcesProvider)
         .contains(sourceOfId(page.id!));
+    final favorable = watchCanFavorite(ref, page.id!);
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -86,34 +93,68 @@ class ArtistPageHeader extends ConsumerWidget {
                       ),
                     ),
                     const SizedBox(height: 6),
-                    Row(
-                      children: [
-                        Flexible(
-                          child: Semantics(
-                            header: true,
-                            child: Text(
-                              name,
-                              style: KalinkaFonts.display(
-                                fontSize: 30,
-                                height: 1.15,
-                                letterSpacing: -0.5,
-                                fontWeight: FontWeight.w500,
-                                color: KalinkaColors.frost,
-                              ),
-                              // Pin follows the longest line.
-                              textWidthBasis: TextWidthBasis.longestLine,
+                    LayoutBuilder(
+                      builder: (context, room) {
+                        final title = Semantics(
+                          header: true,
+                          child: Text(
+                            name,
+                            style: KalinkaFonts.display(
+                              fontSize: 30,
+                              height: 1.15,
+                              letterSpacing: -0.5,
+                              fontWeight: FontWeight.w500,
+                              color: KalinkaColors.frost,
                             ),
+                            // Pin follows the longest line.
+                            textWidthBasis: TextWidthBasis.longestLine,
                           ),
-                        ),
-                        if (pin) ...[
-                          const SizedBox(width: 8),
-                          CatalogPinButton(
-                            key: pinKey,
-                            page: page,
-                            filter: const BrowseFilterQuery(),
-                          ),
-                        ],
-                      ],
+                        );
+                        final actions = Row(
+                          key: actionsKey,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (pin)
+                              CatalogPinButton(
+                                page: page,
+                                filter: const BrowseFilterQuery(),
+                              ),
+                            if (favorable) PageFavoriteButton(id: page.id!),
+                          ],
+                        );
+                        // Together they would leave a phone's name a few
+                        // letters a line, so there they go under it, their
+                        // first glyph at its edge.
+                        if (pin &&
+                            favorable &&
+                            room.maxWidth - 8 - 2 * PageFavoriteButton.size <
+                                _nameRoom * scale) {
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              title,
+                              Transform.translate(
+                                offset: const Offset(
+                                  (CatalogPinButton.iconSize -
+                                          PageFavoriteButton.size) /
+                                      2,
+                                  0,
+                                ),
+                                child: actions,
+                              ),
+                            ],
+                          );
+                        }
+                        return Row(
+                          children: [
+                            Flexible(child: title),
+                            if (pin || favorable) ...[
+                              const SizedBox(width: 8),
+                              actions,
+                            ],
+                          ],
+                        );
+                      },
                     ),
                     const SizedBox(height: 8),
                     Row(

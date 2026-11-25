@@ -12,6 +12,7 @@ import '../../theme/app_theme.dart';
 import '../../utils/browse_links.dart';
 import '../../utils/web_build_target.dart';
 import '../browse_metadata_link.dart';
+import '../favorite_toggle.dart';
 import '../fitted_title.dart';
 import '../measure_size.dart';
 import '../kalinka_back_button.dart';
@@ -21,6 +22,7 @@ import '../search_cards/action_pill_button.dart';
 import '../search_cards/track_row_support.dart';
 import '../source_badge.dart';
 import 'browse_toolbar_metrics.dart';
+import 'page_favorite_button.dart';
 import 'track_group_actions.dart';
 
 /// A pane narrower than this stacks an album's cover over its tracks; from
@@ -184,6 +186,7 @@ double _albumTextWidth(BuildContext context, String text, TextStyle style) {
 
 /// A transparent, fixed header. Both playback actions show labels when they
 /// fit alongside a readable title, and both use accessible icons otherwise.
+/// The album's heart follows them where its source keeps favourites.
 class WideAlbumHeader extends ConsumerWidget {
   final CatalogPage page;
   final WideAlbumMetadata metadata;
@@ -223,6 +226,7 @@ class WideAlbumHeader extends ConsumerWidget {
         padding: browseToolbarPadding,
         child: LayoutBuilder(
           builder: (context, space) {
+            final favorable = watchCanFavorite(ref, page.id!);
             final scale = MediaQuery.textScalerOf(context).scale(16) / 16;
             final controlsHeight =
                 browseToolbarHeight(context, compactTitle: compactToolbar) -
@@ -242,12 +246,14 @@ class WideAlbumHeader extends ConsumerWidget {
               fontWeight: FontWeight.w500,
               color: KalinkaColors.frost,
             );
-            // Back, gaps, and connection status keep their normal targets.
-            const fixedWidth =
+            // Back, gaps, the heart and connection status keep their normal
+            // targets.
+            final fixedWidth =
                 kKalinkaPillTarget +
                 browseToolbarTitleGap +
                 16 +
                 8 +
+                (favorable ? PageFavoriteButton.size : 0) +
                 browseToolbarStatusWidth;
             final labelledActions =
                 ActionPillButton.widthOf(context, 'Play all') +
@@ -330,6 +336,7 @@ class WideAlbumHeader extends ConsumerWidget {
                         iconOnly: iconActions,
                       ),
                     ),
+                    if (favorable) control(PageFavoriteButton(id: page.id!)),
                     control(
                       SizedBox(
                         width: browseToolbarStatusWidth,
@@ -477,6 +484,7 @@ class _AlbumPageHeaderState extends State<AlbumPageHeader> {
             const SizedBox(height: 20),
             Wrap(
               spacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 PlayAllChip(trackIds: [page.id!], trackCount: trackCount),
                 AddAllChip(
@@ -484,6 +492,7 @@ class _AlbumPageHeaderState extends State<AlbumPageHeader> {
                   trackCount: trackCount,
                   name: title,
                 ),
+                PageFavoriteButton(id: page.id!),
               ],
             ),
           ],

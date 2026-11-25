@@ -4,15 +4,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data_model/data_model.dart';
 import '../../providers/kalinka_player_api_provider.dart';
 import '../../providers/toast_provider.dart';
-import '../../theme/app_theme.dart';
-import '../modifier_click.dart';
-import '../keyboard/ink_focus_outline.dart';
+import 'row_circle_button.dart';
 
 /// Plays a whole album, playlist or collection from its first track,
 /// replacing the queue. It sits beside the row's way in, so playing never
-/// needs opening, and opening never plays. Grey: a shortcut on a row, not the
-/// screen's one decision. Hover warms the circle so it reads as its own
-/// control rather than as part of the row it sits on.
+/// needs opening, and opening never plays.
 class RowPlayButton extends ConsumerStatefulWidget {
   final BrowseItem item;
   final FocusNode? focusNode;
@@ -29,7 +25,6 @@ class RowPlayButton extends ConsumerStatefulWidget {
 
 class _RowPlayButtonState extends ConsumerState<RowPlayButton> {
   bool _starting = false;
-  bool _hovering = false;
 
   Future<void> _play() async {
     if (_starting) return;
@@ -52,67 +47,12 @@ class _RowPlayButtonState extends ConsumerState<RowPlayButton> {
     if (mounted) setState(() => _starting = false);
   }
 
-  void _setHover(bool value) {
-    if (value == _hovering) return;
-    setState(() => _hovering = value);
-  }
-
   @override
-  Widget build(BuildContext context) {
-    final hot = _hovering && !_starting;
-
-    return ClickAtOnce(
-      child: MergeSemantics(
-        child: Semantics(
-          button: true,
-          label: 'Play ${RowPlayButton.nameOf(widget.item)}',
-          child: SizedBox(
-            width: 44,
-            height: 48,
-            child: Center(
-              child: Material(
-                type: MaterialType.transparency,
-                child: InkWell(
-                  focusNode: widget.focusNode,
-                  mouseCursor: WidgetStateMouseCursor.clickable,
-                  customBorder: const CircleBorder(),
-                  // Kept while starting, so the click never falls through
-                  // to the row.
-                  onTap: _play,
-                  onHover: _setHover,
-                  focusColor: KalinkaColors.surfaceOverlay,
-                  child: InkFocusOutline(
-                    shape: const CircleBorder(),
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 120),
-                      width: 32,
-                      height: 32,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: hot
-                            ? KalinkaColors.surfaceOverlay
-                            : KalinkaColors.surfaceElevated,
-                        border: Border.all(
-                          color: hot
-                              ? KalinkaColors.textMuted
-                              : KalinkaColors.borderDefault,
-                        ),
-                      ),
-                      child: Icon(
-                        _starting
-                            ? Icons.hourglass_empty_rounded
-                            : Icons.play_arrow_rounded,
-                        size: 18,
-                        color: KalinkaColors.textPrimary,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => RowCircleButton(
+    label: 'Play ${RowPlayButton.nameOf(widget.item)}',
+    icon: _starting ? Icons.hourglass_empty_rounded : Icons.play_arrow_rounded,
+    busy: _starting,
+    onTap: _play,
+    focusNode: widget.focusNode,
+  );
 }

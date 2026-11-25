@@ -61,4 +61,5 @@ const _$PlayQueueEventTypeEnumMap = {
   PlayQueueEventType.receiversChanged: 'receivers_changed',
   PlayQueueEventType.playbackEvent: 'playback_event',
   PlayQueueEventType.keepPlayingChanged: 'keep_playing_changed',
+  PlayQueueEventType.favoriteChanged: 'favorite_changed',
 };

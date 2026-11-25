@@ -33,6 +33,7 @@ import 'package:kalinka/widgets/playback_progress_slider.dart';
 import 'package:kalinka/widgets/transport_button.dart';
 import 'package:kalinka/widgets/transport_controls.dart';
 
+import 'support/favorites_server.dart';
 import 'support/home_shell.dart';
 
 class _Api extends KalinkaWsApi {
@@ -79,53 +80,18 @@ class _DislikeApi extends HomeApi {
   }
 }
 
-/// Keeps favourites as a server would: [favorites] are the source's marked
-/// tracks, which cannot be read where [unknown]. An add or a remove fails
-/// with [failure] where it is set, and waits for [held] where that is.
-class _FavoritesApi extends _DislikeApi {
+/// Keeps favourites as [FavoritesServer] does, set up in one go.
+class _FavoritesApi extends _DislikeApi with FavoritesServer {
   _FavoritesApi({
-    this.favorites = const {},
-    this.failure,
-    this.held,
-    this.unknown = false,
-  });
-
-  final Set<String> favorites;
-  final Exception? failure;
-  final bool unknown;
-  final Completer<void>? held;
-  final List<String?> asked = [];
-  final List<String> added = [];
-  final List<String> removed = [];
-
-  @override
-  Future<FavoriteIds> getFavoriteIds({String? source}) async {
-    asked.add(source);
-    if (unknown) throw Exception('favourites unavailable');
-    return FavoriteIds(
-      albums: [],
-      tracks: [...favorites],
-      artists: [],
-      playlists: [],
-    );
-  }
-
-  @override
-  Future<StatusMessage> addFavorite(String id) async {
-    added.add(id);
-    return _answer();
-  }
-
-  @override
-  Future<StatusMessage> removeFavorite(String id) async {
-    removed.add(id);
-    return _answer();
-  }
-
-  Future<StatusMessage> _answer() async {
-    await held?.future;
-    if (failure != null) throw failure!;
-    return StatusMessage(message: 'Ok');
+    Set<String> favorites = const {},
+    Exception? failure,
+    Completer<void>? held,
+    bool unknown = false,
+  }) {
+    this.favorites.addAll(favorites);
+    this.failure = failure;
+    this.held = held;
+    if (unknown) away.add(_qobuz);
   }
 }
 
@@ -493,8 +459,8 @@ void main() {
       expect(_hearted, findsOneWidget);
       await tester.tap(_hearted, warnIfMissed: false);
       await tester.pump();
-      expect(api.added, [playing]);
-      expect(api.removed, isEmpty);
+      expect(api.marked, [playing]);
+      expect(api.unmarked, isEmpty);
 
       held.complete();
       await tester.pump();
@@ -509,8 +475,8 @@ void main() {
       await tester.tap(_hearted);
       await tester.pump();
 
-      expect(api.removed, [playing]);
-      expect(api.added, isEmpty);
+      expect(api.unmarked, [playing]);
+      expect(api.marked, isEmpty);
       expect(_heart, findsOneWidget);
     });
 
@@ -532,7 +498,7 @@ void main() {
         await tester.tap(_heart);
         await tester.pump();
 
-        expect(api.added, [playing]);
+        expect(api.marked, [playing]);
         expect(_heart, findsOneWidget);
         expect(_hearted, findsNothing);
         final toast = container.read(toastProvider).single;
@@ -553,7 +519,7 @@ void main() {
       await tester.tap(_hearted);
       await tester.pump();
 
-      expect(api.removed, [playing]);
+      expect(api.unmarked, [playing]);
       expect(_hearted, findsOneWidget);
       expect(
         container.read(toastProvider).single.message,
@@ -571,9 +537,13 @@ void main() {
       expect(_heart, findsOneWidget);
       await tester.tap(_heart, warnIfMissed: false);
       await tester.pump();
+      // Asked again a few times while they stay unknown.
+      await tester.pump(const Duration(seconds: 16));
+      await tester.tap(_heart, warnIfMissed: false);
+      await tester.pump();
 
-      expect(api.added, isEmpty);
-      expect(api.removed, isEmpty);
+      expect(api.marked, isEmpty);
+      expect(api.unmarked, isEmpty);
     });
 
     testWidgets('a server away takes no tap', (tester) async {
@@ -586,7 +556,7 @@ void main() {
       await tester.tap(_heart, warnIfMissed: false);
       await tester.pump();
 
-      expect(api.added, isEmpty);
+      expect(api.marked, isEmpty);
     });
 
     testWidgets('a two-line title keeps both on its first line', (

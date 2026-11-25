@@ -186,6 +186,9 @@ abstract class KalinkaPlayerProxy {
     int limit = 10,
     String filter = '',
   });
+
+  /// Marks [id] a favourite of its source, or with [removeFavorite] no longer
+  /// one. A [ServerRefusalException] says why the server will not keep it.
   Future<StatusMessage> addFavorite(String id);
   Future<StatusMessage> removeFavorite(String id);
 
@@ -933,24 +936,37 @@ class KalinkaPlayerProxyImpl implements KalinkaPlayerProxy {
   }
 
   @override
-  Future<StatusMessage> addFavorite(String id) async {
-    return client.put('/favorite/add/$id').then((response) {
-      return statusMessageFromResponse(response);
-    });
-  }
+  Future<StatusMessage> addFavorite(String id) =>
+      _changeFavorite(client.put('/favorite/add/$id'));
 
   @override
-  Future<StatusMessage> removeFavorite(String id) async {
-    return client.delete('/favorite/remove/$id').then((response) {
-      return statusMessageFromResponse(response);
-    });
+  Future<StatusMessage> removeFavorite(String id) =>
+      _changeFavorite(client.delete('/favorite/remove/$id'));
+
+  /// A favourite the server will not keep, as a playlist of one's own, is
+  /// answered 422 with a `detail.reason` written for the user.
+  Future<StatusMessage> _changeFavorite(Future<Response> request) async {
+    try {
+      return statusMessageFromResponse(await request);
+    } on DioException catch (e) {
+      final data = e.response?.data;
+      final detail = data is Map ? data['detail'] : null;
+      final reason = detail is Map ? detail['reason'] : null;
+      if (e is ServerRefusalException ||
+          e.response?.statusCode != 422 ||
+          reason is! String ||
+          reason.isEmpty) {
+        rethrow;
+      }
+      throw ServerRefusalException(e, favoriteRefused, reason);
+    }
   }
 
   @override
   Future<FavoriteIds> getFavoriteIds({String? source}) async {
     final response = await client.get(
       '/favorite/ids',
-      queryParameters: source == null ? null : {'source': source},
+      queryParameters: source == null ? null : {'sources': source},
     );
     if (response.statusCode != 200) {
       throw Exception('Failed to get favorite ids, url=${response.realUri}');

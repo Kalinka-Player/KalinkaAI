@@ -1,19 +1,27 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kalinka/data_model/data_model.dart';
+import 'package:kalinka/providers/connection_state_provider.dart';
 import 'package:kalinka/providers/kalinka_player_api_provider.dart';
 import 'package:kalinka/providers/source_modules_provider.dart';
 import 'package:kalinka/providers/url_resolver.dart';
+import 'package:kalinka/providers/wire_event_provider.dart'
+    show playQueueEventBusProvider;
+import 'package:kalinka/theme/app_theme.dart';
 import 'package:kalinka/widgets/catalog_art.dart';
 import 'package:kalinka/widgets/fitted_art.dart';
 import 'package:kalinka/widgets/search_cards/artwork_grid.dart';
 import 'package:kalinka/widgets/search_cards/artwork_grid_card.dart';
 import 'package:kalinka/widgets/search_cards/browse_navigation_scope.dart';
+import 'package:kalinka/widgets/search_cards/cover_favorite_button.dart';
 import 'package:kalinka/widgets/search_cards/row_play_button.dart';
 
+import 'support/favorites_server.dart';
 import 'support/focus.dart';
+import 'support/home_shell.dart' show SettableConnection;
 
 class _Api implements KalinkaPlayerProxy {
   final replaced = <List<String>>[];
@@ -33,6 +41,23 @@ class _Api implements KalinkaPlayerProxy {
   @override
   dynamic noSuchMethod(Invocation invocation) => throw UnimplementedError();
 }
+
+class _FavoritesApi extends _Api with FavoritesServer {}
+
+/// One source that keeps favourites, and one that keeps none.
+final _sources = [
+  favoritesSource('qobuz'),
+  favoritesSource('jamendo', favorites: false),
+];
+
+BrowseItem _albumOf(String source) => BrowseItem(
+  id: 'kalinka:$source:album:1',
+  canBrowse: true,
+  canAdd: true,
+  album: Album(id: '1', title: 'Album'),
+);
+
+final _coverHeart = find.byType(CoverFavoriteButton);
 
 BrowseItem _catalog({String? image, double? ratio, String? description}) =>
     BrowseItem(
@@ -62,11 +87,14 @@ Future<void> _mount(
   double shape = 1,
   double width = 300,
   double? dpr,
+  List<ModuleInfo> sources = const [],
 }) => tester.pumpWidget(
   ProviderScope(
     overrides: [
-      sourceModulesProvider.overrideWith((ref) => const <ModuleInfo>[]),
+      sourceModulesProvider.overrideWith((ref) => sources),
       urlResolverProvider.overrideWithValue(UrlResolver('https://art.example')),
+      connectionStateProvider.overrideWith(SettableConnection.new),
+      playQueueEventBusProvider.overrideWith((ref) => const Stream.empty()),
       if (api != null) kalinkaProxyProvider.overrideWithValue(api),
     ],
     child: MaterialApp(
@@ -321,5 +349,187 @@ void main() {
     expect(api.played, [0, 0]);
     expect(tester.takeException(), isNull);
     semantics.dispose();
+  });
+
+  group('a cover\'s heart', () {
+    testWidgets('stands left of Play in the circle Play wears', (tester) async {
+      final api = _FavoritesApi();
+      await _mount(tester, _albumOf('qobuz'), api: api, sources: _sources);
+      await tester.pumpAndSettle();
+
+      final art = tester.getRect(find.byType(AspectRatio).first);
+      final heart = tester.getRect(_coverHeart);
+      final play = tester.getRect(find.byType(RowPlayButton));
+      expect(api.asked, ['qobuz']);
+      expect(heart.size, play.size);
+      expect(heart.right, play.left);
+      expect(heart.top, play.top);
+      expect(art.contains(heart.topLeft), isTrue);
+
+      BoxDecoration circleOf(Finder button) =>
+          tester
+                  .widget<AnimatedContainer>(
+                    find.descendant(
+                      of: button,
+                      matching: find.byType(AnimatedContainer),
+                    ),
+                  )
+                  .decoration!
+              as BoxDecoration;
+      final circle = circleOf(_coverHeart);
+      expect(circle.shape, BoxShape.circle);
+      expect(circle.color, KalinkaColors.surfaceElevated);
+      expect(circle.border, Border.all(color: KalinkaColors.borderDefault));
+      expect(circle, circleOf(find.byType(RowPlayButton)));
+      expect(
+        tester.getSize(
+          find.descendant(
+            of: _coverHeart,
+            matching: find.byType(AnimatedContainer),
+          ),
+        ),
+        const Size.square(32),
+      );
+      final icon = tester.widget<Icon>(
+        find.descendant(of: _coverHeart, matching: find.byType(Icon)),
+      );
+      expect(icon.icon, Icons.favorite_border_rounded);
+      expect(icon.color, KalinkaColors.textPrimary);
+      expect(find.byTooltip('Add to favourites'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('comes and goes with Play', (tester) async {
+      await _mount(
+        tester,
+        _albumOf('qobuz'),
+        api: _FavoritesApi(),
+        sources: _sources,
+      );
+      await tester.pumpAndSettle();
+      final play = find.byType(RowPlayButton);
+      // On a touch screen, both always.
+      expect(_coverHeart.hitTestable(), findsOneWidget);
+      expect(play.hitTestable(), findsOneWidget);
+
+      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await mouse.addPointer(location: const Offset(700, 500));
+      addTearDown(mouse.removePointer);
+      await tester.pumpAndSettle();
+      expect(_coverHeart.hitTestable(), findsNothing);
+      expect(play.hitTestable(), findsNothing);
+
+      await mouse.moveTo(tester.getCenter(find.text('Album')));
+      await tester.pumpAndSettle();
+      expect(_coverHeart.hitTestable(), findsOneWidget);
+      expect(play.hitTestable(), findsOneWidget);
+
+      await mouse.moveTo(const Offset(700, 500));
+      await tester.pumpAndSettle();
+      expect(_coverHeart.hitTestable(), findsNothing);
+      expect(play.hitTestable(), findsNothing);
+    });
+
+    testWidgets('marks without opening or playing', (tester) async {
+      final api = _FavoritesApi();
+      final opened = <BrowseItem>[];
+      final item = _albumOf('qobuz');
+      await _mount(
+        tester,
+        item,
+        api: api,
+        onOpen: opened.add,
+        sources: _sources,
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(_coverHeart);
+      await tester.pump();
+
+      expect(api.marked, [item.id]);
+      expect(opened, isEmpty);
+      expect(api.replaced, isEmpty);
+      final icon = tester.widget<Icon>(
+        find.descendant(of: _coverHeart, matching: find.byType(Icon)),
+      );
+      expect(icon.icon, Icons.favorite_rounded);
+      expect(icon.color, KalinkaColors.textPrimary);
+      expect(find.byTooltip('Remove from favourites'), findsOneWidget);
+
+      await tester.tap(_coverHeart);
+      await tester.pump();
+      expect(api.unmarked, [item.id]);
+      expect(opened, isEmpty);
+    });
+
+    testWidgets('leaves the card one keyboard stop, and goes in selection', (
+      tester,
+    ) async {
+      await _mount(
+        tester,
+        _albumOf('qobuz'),
+        api: _FavoritesApi(),
+        sources: _sources,
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        traversableFocusNodesIn(find.byType(ArtworkGridCard)),
+        hasLength(1),
+      );
+
+      await tester.longPress(find.text('Album'));
+      await tester.pumpAndSettle();
+      expect(_coverHeart, findsNothing);
+      expect(find.byType(RowPlayButton), findsNothing);
+    });
+
+    testWidgets('is a playlist\'s too', (tester) async {
+      final api = _FavoritesApi()..favorites.add('kalinka:qobuz:playlist:p');
+      await _mount(
+        tester,
+        BrowseItem(
+          id: 'kalinka:qobuz:playlist:p',
+          name: 'Jazz Classics',
+          canBrowse: true,
+          canAdd: true,
+          playlist: Playlist(id: 'p', name: 'Jazz Classics'),
+        ),
+        api: api,
+        sources: _sources,
+      );
+      await tester.pumpAndSettle();
+
+      expect(_coverHeart, findsOneWidget);
+      expect(find.byTooltip('Remove from favourites'), findsOneWidget);
+    });
+
+    testWidgets('is no artist\'s, no catalog\'s, and none where the source '
+        'keeps none', (tester) async {
+      final api = _FavoritesApi();
+      for (final item in [
+        BrowseItem(
+          id: 'kalinka:qobuz:artist:1',
+          name: 'Someone',
+          canBrowse: true,
+          canAdd: false,
+          artist: Artist(id: '1', name: 'Someone'),
+        ),
+        BrowseItem(
+          id: 'kalinka:qobuz:catalog:mixes',
+          name: 'Mixes',
+          canBrowse: true,
+          canAdd: false,
+          catalog: Catalog(id: 'mixes', title: 'Mixes'),
+        ),
+        _albumOf('jamendo'),
+      ]) {
+        await _mount(tester, item, api: api, sources: _sources);
+        await tester.pumpAndSettle();
+        expect(_coverHeart, findsNothing);
+      }
+      expect(find.byType(RowPlayButton), findsOneWidget);
+      expect(api.asked, isEmpty);
+    });
   });
 }

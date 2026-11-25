@@ -13,20 +13,23 @@ import '../../providers/url_resolver.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/web_build_target.dart';
 import '../catalog_art.dart';
+import '../favorite_toggle.dart';
 import '../fitted_art.dart';
 import '../modifier_click.dart';
 import '../source_badge.dart';
 import '../tap_highlight.dart' show kalinkaOverlay;
 import 'browse_navigation_scope.dart';
+import 'cover_favorite_button.dart';
 import 'row_play_button.dart';
 import 'track_row_support.dart' show ArtStandIn;
 
 /// An artwork grid item: square covers and round artist portraits followed by
 /// a name and detail, or a catalog's card with its name on it. The cover and
 /// name open its page; Play rests on the cover while the card is lit,
-/// and always on a touch screen. Long-press takes a playable item into the
-/// selection, as its row would. Under the pointer, held or focused, the whole
-/// card is outlined, as the cards of a Home rail are.
+/// and always on a touch screen, and before it a heart where an album's or
+/// a playlist's source keeps favourites. Long-press takes a playable item
+/// into the selection, as its row would. Under the pointer, held or focused,
+/// the whole card is outlined, as the cards of a Home rail are.
 class ArtworkGridCard extends ConsumerStatefulWidget {
   final BrowseItem item;
 
@@ -98,11 +101,16 @@ class _ArtworkGridCardState extends ConsumerState<ArtworkGridCard> {
     debugLabel: 'Grid card Play',
     skipTraversal: true,
   );
+  final _favoriteButton = FocusNode(
+    debugLabel: 'Grid card favourite',
+    skipTraversal: true,
+  );
 
   @override
   void dispose() {
     _interaction.dispose();
     _playButton.dispose();
+    _favoriteButton.dispose();
     super.dispose();
   }
 
@@ -119,6 +127,7 @@ class _ArtworkGridCardState extends ConsumerState<ArtworkGridCard> {
         : ArtworkGridCard.captionOf(item);
     final round = item.browseType == BrowseType.artist;
     final playable = item.canAdd && !round;
+    final favorable = !round && watchCanFavorite(ref, item.id);
     final selecting = ref.watch(
       selectionStateProvider.select((s) => s.isActive),
     );
@@ -188,6 +197,7 @@ class _ArtworkGridCardState extends ConsumerState<ArtworkGridCard> {
                       round: round,
                       selected: selected,
                       playable: playable && !selecting,
+                      favorable: favorable && !selecting,
                       catalogTitle: catalog ? title : null,
                       showSource: showSource,
                     ),
@@ -277,6 +287,7 @@ class _ArtworkGridCardState extends ConsumerState<ArtworkGridCard> {
     required bool round,
     required bool selected,
     required bool playable,
+    required bool favorable,
     required String? catalogTitle,
     required bool showSource,
   }) => LayoutBuilder(
@@ -370,7 +381,7 @@ class _ArtworkGridCardState extends ConsumerState<ArtworkGridCard> {
                 child: const Icon(Icons.check, color: Colors.white, size: 32),
               ),
             ),
-          if (playable)
+          if (playable || favorable)
             Positioned(
               right: 2,
               bottom: 2,
@@ -395,10 +406,27 @@ class _ArtworkGridCardState extends ConsumerState<ArtworkGridCard> {
                     ),
                   );
                 },
-                child: Tooltip(
-                  message: 'Play (Shift+Enter)',
-                  excludeFromSemantics: true,
-                  child: RowPlayButton(item: item, focusNode: _playButton),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (favorable)
+                      FavoriteToggle(
+                        id: item.id,
+                        builder: (context, mark) => CoverFavoriteButton(
+                          mark: mark,
+                          focusNode: _favoriteButton,
+                        ),
+                      ),
+                    if (playable)
+                      Tooltip(
+                        message: 'Play (Shift+Enter)',
+                        excludeFromSemantics: true,
+                        child: RowPlayButton(
+                          item: item,
+                          focusNode: _playButton,
+                        ),
+                      ),
+                  ],
                 ),
               ),
             ),

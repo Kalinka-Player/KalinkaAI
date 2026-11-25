@@ -8,11 +8,13 @@ import '../../providers/search_session_provider.dart';
 import '../../providers/source_modules_provider.dart';
 import '../../theme/app_theme.dart';
 import '../browse_filters/browse_filter_form.dart';
+import '../favorite_toggle.dart';
 import '../home/catalog_pin_button.dart';
 import '../keyboard/app_keyboard_navigation.dart';
 import '../source_badge.dart';
 import '../search_cards/action_pill_button.dart';
 import '../tap_highlight.dart';
+import 'page_favorite_button.dart';
 
 /// Where the bar's host draws a folder's actions as its header collapses.
 enum FolderActionsPlace {
@@ -29,8 +31,9 @@ enum FolderActionsPlace {
 }
 
 /// A catalog's identity, which scrolls away with the page and slides under
-/// the bar, handing over to it with Pin once out of sight; a folder's own
-/// actions with it. Search, Filters and Grid/List are the bar's own.
+/// the bar, handing over to it with Pin, or a playlist's heart, once out of
+/// sight; a folder's own actions with it. Search, Filters and Grid/List are
+/// the bar's own.
 class CatalogSliverHeader extends ConsumerStatefulWidget {
   final CatalogPage page;
   final BrowseFilterQuery query;
@@ -159,6 +162,7 @@ class _CatalogSliverHeaderState extends ConsumerState<CatalogSliverHeader> {
     final pin =
         page.isCatalog &&
         !ref.watch(builtinSourcesProvider).contains(sourceOfId(page.id!));
+    final favorable = watchCanFavorite(ref, page.id!);
     final scaler = MediaQuery.textScalerOf(context);
     final scale = scaler.scale(16) / 16;
     final rowHeight = widget.barTakesActions
@@ -273,7 +277,9 @@ class _CatalogSliverHeaderState extends ConsumerState<CatalogSliverHeader> {
             _naturalTitleWidth = lineWidth(page.title ?? '', titleStyle);
           }
           final available = width - 32;
-          final pinWidth = pin ? 56.0 : 0.0;
+          // Pin and the heart, each a 48dp target, 8dp after the title.
+          final marks = (pin ? 1 : 0) + (favorable ? 1 : 0);
+          final marksWidth = marks == 0 ? 0.0 : 8.0 + 48 * marks;
           // Play all, Enqueue and Up one folder, and on storage the library
           // and eject pills.
           final folderActions = widget.actions == null
@@ -286,7 +292,7 @@ class _CatalogSliverHeaderState extends ConsumerState<CatalogSliverHeader> {
               widget.actions != null &&
               available >=
                   math.min(_naturalTitleWidth, 320 * scale) +
-                      pinWidth +
+                      marksWidth +
                       identityGap +
                       folderActions;
           final controlsWidth = wide ? folderActions : available;
@@ -324,7 +330,7 @@ class _CatalogSliverHeaderState extends ConsumerState<CatalogSliverHeader> {
           final measurement = (
             title: page.title ?? '',
             subtitle: subtitle,
-            width: headingWidth - pinWidth,
+            width: headingWidth - marksWidth,
             fontSize: titleStyle.fontSize!,
             scaler: scaler,
             direction: Directionality.of(context),
@@ -334,11 +340,11 @@ class _CatalogSliverHeaderState extends ConsumerState<CatalogSliverHeader> {
           if (_measurement != measurement) {
             _measurement = measurement;
             _titleHeight = math.max(
-              pin ? 48 : 0,
+              marks == 0 ? 0 : 48,
               textHeight(
                 page.title ?? '',
                 titleStyle,
-                math.max(1, headingWidth - pinWidth),
+                math.max(1, headingWidth - marksWidth),
               ),
             );
             _headingHeight =
@@ -481,8 +487,8 @@ class _CatalogSliverHeaderState extends ConsumerState<CatalogSliverHeader> {
                                       ),
                                     ),
                                   ),
-                                  if (pin) ...[
-                                    const SizedBox(width: 8),
+                                  if (marks > 0) const SizedBox(width: 8),
+                                  if (pin)
                                     SizedBox(
                                       width: 48,
                                       height: 48,
@@ -491,7 +497,8 @@ class _CatalogSliverHeaderState extends ConsumerState<CatalogSliverHeader> {
                                         filter: widget.query,
                                       ),
                                     ),
-                                  ],
+                                  if (favorable)
+                                    PageFavoriteButton(id: page.id!),
                                 ],
                               ),
                             ),

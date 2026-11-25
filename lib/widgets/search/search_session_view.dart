@@ -49,6 +49,7 @@ import 'folder_trail.dart';
 import 'folder_page_actions.dart';
 import '../search_cards/action_pill_button.dart';
 import 'library_activity.dart';
+import 'page_favorite_button.dart';
 import 'collections_edit_bar.dart' show leaveCollectionEditing;
 import '../home/home_layout.dart';
 import '../home/catalog_pin_button.dart';
@@ -1412,8 +1413,9 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
   }
 
   /// The top level's bar is the app's own: wordmark and connection chip.
-  /// Catalog Search, Filters and Grid/List stay in the bar; title and Pin
-  /// join Back on collapse. Results retain their search-and-filters control.
+  /// Catalog Search, Filters and Grid/List stay in the bar; title, Pin and
+  /// the page's heart join Back on collapse. Results retain their
+  /// search-and-filters control.
   double _barRowHeight(BuildContext context, SearchSessionState session) =>
       session.activeView == FindMusicView.catalogs &&
           _compactCatalogHeader(session)
@@ -1875,7 +1877,7 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
                         if ((catalogChrome ||
                                 (!onResults && session.catalogPage.isArtist)) &&
                             _catalogHeadersCollapsed[session.visitId] == true &&
-                            !_compactCatalogHeader(session))
+                            !_compactCatalogHeader(session)) ...[
                           CatalogPinButton(
                             page: session.shownListing,
                             // As the artist header's Pin saves it.
@@ -1885,6 +1887,9 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
                                     type: session.expandedShelf,
                                   ),
                           ),
+                          if (session.shownListing.id case final id?)
+                            PageFavoriteButton(id: id),
+                        ],
                         if (inline) ...[
                           const SizedBox(width: 8),
                           SizedBox(
