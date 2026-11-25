@@ -588,6 +588,14 @@ void main() {
         ),
         'A track of your own cannot be a favourite.',
       ),
+      (
+        ServerRefusalException(
+          DioException(requestOptions: RequestOptions()),
+          favoriteUnavailable,
+          'TIDAL sign-in expired.',
+        ),
+        'Could not add this track to favourites. TIDAL sign-in expired.',
+      ),
     ]) {
       testWidgets('is taken back: $said', (tester) async {
         final items = [_track('qobuz', 1)];
