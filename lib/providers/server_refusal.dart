@@ -13,6 +13,10 @@ const _noTracks = 'no_tracks';
 /// no code of its own.
 const favoriteRefused = 'favorite_refused';
 
+/// A favourite its source could not change just now, in the source's words:
+/// a sign-in to renew, a link to pair again.
+const favoriteUnavailable = 'favorite_unavailable';
+
 /// A request the server refused in words meant for the user: an add past its
 /// queue limit, a replacement with no tracks, a favourite it will not keep,
 /// or on a demo server a change it never allows or too many changes at once.
@@ -30,7 +34,7 @@ class ServerRefusalException extends DioException {
       );
 
   /// The server's `detail.code`, such as `queue_full` or `demo_read_only`;
-  /// [favoriteRefused] where it sent none.
+  /// [favoriteRefused] or [favoriteUnavailable] where it sent none.
   final String code;
 
   final String reason;

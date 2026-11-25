@@ -160,9 +160,25 @@ void main() {
       });
     }
 
+    test('a change its source could not make says why in its words', () async {
+      final server = QueueServer(503, {
+        'detail': {'source': 'tidal', 'reason': 'TIDAL sign-in expired.'},
+      }, route: '/favorite/add/$own');
+
+      await expectLater(
+        server.api().addFavorite(own),
+        throwsA(
+          isA<ServerRefusalException>()
+              .having((e) => e.code, 'code', favoriteUnavailable)
+              .having((e) => e.reason, 'reason', 'TIDAL sign-in expired.'),
+        ),
+      );
+    });
+
     for (final (status, detail) in [
       (409, {'source': 'tidal', 'reason': 'tidal keeps no favourites'}),
       (422, {'field': 'id'}),
+      (503, {'source': 'tidal'}),
       (504, {'source': 'tidal', 'reason': 'tidal did not answer'}),
     ]) {
       test('a $status without words for the user is no refusal', () async {

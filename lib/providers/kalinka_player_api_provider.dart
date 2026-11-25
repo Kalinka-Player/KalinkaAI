@@ -944,7 +944,8 @@ class KalinkaPlayerProxyImpl implements KalinkaPlayerProxy {
       _changeFavorite(client.delete('/favorite/remove/$id'));
 
   /// A favourite the server will not keep, as a playlist of one's own, is
-  /// answered 422 with a `detail.reason` written for the user.
+  /// answered 422, and one its source could not change just now 503, each
+  /// with a `detail.reason` written for the user.
   Future<StatusMessage> _changeFavorite(Future<Response> request) async {
     try {
       return statusMessageFromResponse(await request);
@@ -952,13 +953,18 @@ class KalinkaPlayerProxyImpl implements KalinkaPlayerProxy {
       final data = e.response?.data;
       final detail = data is Map ? data['detail'] : null;
       final reason = detail is Map ? detail['reason'] : null;
+      final code = switch (e.response?.statusCode) {
+        422 => favoriteRefused,
+        503 => favoriteUnavailable,
+        _ => null,
+      };
       if (e is ServerRefusalException ||
-          e.response?.statusCode != 422 ||
+          code == null ||
           reason is! String ||
           reason.isEmpty) {
         rethrow;
       }
-      throw ServerRefusalException(e, favoriteRefused, reason);
+      throw ServerRefusalException(e, code, reason);
     }
   }
 

@@ -73,12 +73,16 @@ mixin FavoriteMarking<T extends ConsumerStatefulWidget> on ConsumerState<T> {
       await favorites.toggle(id);
     } catch (e) {
       final kind = EntityId.fromString(id).type.toValue();
+      final failed = adding
+          ? 'Could not add this $kind to favourites'
+          : 'Could not remove this $kind from favourites';
       toast.show(
-        e is ServerRefusalException
-            ? '$e'
-            : adding
-            ? 'Could not add this $kind to favourites'
-            : 'Could not remove this $kind from favourites',
+        switch (e) {
+          ServerRefusalException(code: favoriteUnavailable, :final reason) =>
+            '$failed. $reason',
+          ServerRefusalException() => '$e',
+          _ => failed,
+        },
         isError: true,
         inPanel: inPanel,
       );
