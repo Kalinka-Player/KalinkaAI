@@ -123,22 +123,31 @@ class PinnedCatalog {
     'genreNames': valueNames,
   };
 
-  factory PinnedCatalog.fromJson(Map<String, dynamic> json) => PinnedCatalog(
-    page: CatalogPage.fromJson(Map<String, dynamic>.from(json['page'] as Map)),
-    filter: BrowseFilterQuery.fromJson(
+  factory PinnedCatalog.fromJson(Map<String, dynamic> json) {
+    final page = CatalogPage.fromJson(
+      Map<String, dynamic>.from(json['page'] as Map),
+    );
+    final filter = BrowseFilterQuery.fromJson(
       Map<String, dynamic>.from(json['filter'] as Map),
-    ),
-    valueNames: Map<String, String>.from(json['genreNames'] as Map? ?? {}),
-    homeName: json['homeName'] as String?,
-    // Existing folder pins gain album recognition. Explicit compact choices
-    // remain shortcuts; destinations, filters and order are unchanged.
-    preview: json['previewVersion'] != 3
-        ? json['preview'] == 'compact'
-              ? HomePreviewType.compact
-              : HomePreviewType.automatic
-        : HomePreviewType.values.asNameMap()[json['preview']] ??
-              HomePreviewType.automatic,
-  );
+    );
+    return PinnedCatalog(
+      page: page,
+      // An older app's pin names its values for the page it was pinned on.
+      filter: filter.legacyChoice.isEmpty
+          ? filter
+          : filter.fittedTo(page.filterCapabilities),
+      valueNames: Map<String, String>.from(json['genreNames'] as Map? ?? {}),
+      homeName: json['homeName'] as String?,
+      // Existing folder pins gain album recognition. Explicit compact choices
+      // remain shortcuts; destinations, filters and order are unchanged.
+      preview: json['previewVersion'] != 3
+          ? json['preview'] == 'compact'
+                ? HomePreviewType.compact
+                : HomePreviewType.automatic
+          : HomePreviewType.values.asNameMap()[json['preview']] ??
+                HomePreviewType.automatic,
+    );
+  }
 }
 
 /// Home's pins for the connected server; null until it is known which server

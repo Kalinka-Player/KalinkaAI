@@ -161,7 +161,7 @@ void main() {
     test('a filter saved before decades loads its genres as before', () {
       final saved = BrowseFilterQuery.fromJson(
         jsonDecode('{"text":"blue","genreIds":["jazz","rock"]}'),
-      );
+      ).fittedTo(_shelf);
       expect(saved.text, 'blue');
       expect(saved.genreIds, ['jazz', 'rock']);
       expect(saved.selections.keys, [kGenreFieldId]);
@@ -171,12 +171,33 @@ void main() {
       );
     });
 
-    test('genre is saved where an older app reads it, decades beside it', () {
+    test('a filter saved before names the shelf\'s first values field', () {
+      final collection = BrowseFilterCapabilities.fromSpecs(const [
+        _textField,
+        FilterSpec(
+          id: 'source',
+          kind: FilterKind.choice,
+          label: 'Source',
+          ops: [FilterOp.any],
+        ),
+        _genreField,
+      ], catalogId: _albums);
+
+      final saved = BrowseFilterQuery.fromJson(
+        jsonDecode('{"genreIds":["qobuz"]}'),
+      ).fittedTo(collection);
+
+      expect(saved.selected('source'), ['qobuz']);
+      expect(saved.genreIds, isEmpty);
+    });
+
+    test('genre is saved where an older app reads it, and beside decades', () {
       final json = _seventiesJazz.toJson();
       expect(json, {
         'genreIds': ['jazz'],
         'values': {
           'decade': ['1970', '1980'],
+          'genre': ['jazz'],
         },
       });
       final restored = BrowseFilterQuery.fromJson(jsonDecode(jsonEncode(json)));
@@ -221,6 +242,35 @@ void main() {
       );
       expect(restored.key, pin(_seventiesJazz).key);
       expect(restored.valueNames['1970'], '1970s');
+    });
+
+    test('an older app\'s pin names its values for the page it was on', () {
+      final json = PinnedCatalog(
+        page: const CatalogPage.category(
+          id: _albums,
+          title: 'Collections',
+          filters: [
+            _textField,
+            FilterSpec(
+              id: 'source',
+              kind: FilterKind.choice,
+              label: 'Source',
+              ops: [FilterOp.any],
+            ),
+            _genreField,
+          ],
+        ),
+        filter: const BrowseFilterQuery(),
+        preview: HomePreviewType.automatic,
+      ).toJson();
+      json['filter'] = {
+        'genreIds': ['qobuz'],
+      };
+
+      final restored = PinnedCatalog.fromJson(jsonDecode(jsonEncode(json)));
+
+      expect(restored.filter.selected('source'), ['qobuz']);
+      expect(restored.filter.genreIds, isEmpty);
     });
   });
 

@@ -55,11 +55,13 @@ final dislikeAvailableProvider = Provider<bool>(
 );
 
 /// Whether tracks like the playing one can be asked for: the server queues
-/// them, and the playing track's own source can suggest them.
+/// them, the queue is what plays rather than a plugin, and the playing
+/// track's own source can suggest them.
 final similarTracksAvailableProvider = Provider<bool>((ref) {
   if (!ref.watch(
-    queueFeaturesProvider.select((f) => f.value?.similar ?? false),
-  )) {
+        queueFeaturesProvider.select((f) => f.value?.similar ?? false),
+      ) ||
+      ref.watch(playbackControlProvider.select((c) => c.isExclusive))) {
     return false;
   }
   final source = ref.watch(
@@ -78,10 +80,13 @@ final keepPlayingProvider = Provider<bool?>(
 );
 
 /// Whether turning Keep playing on would carry the queue on now: it is off,
-/// the queue stands at its last track or has played it out, and a source of
-/// one of its tracks can suggest what follows.
+/// no repeat carries the queue on instead, the queue stands at its last
+/// track or has played it out, and a source of one of its tracks can suggest
+/// what follows.
 final keepPlayingOfferedProvider = Provider<bool>((ref) {
   if (ref.watch(keepPlayingProvider) != false) return false;
+  final mode = ref.watch(playbackModeProvider);
+  if (mode.repeatAll || mode.repeatSingle) return false;
   final ended = ref.watch(
     playQueueStateStoreProvider.select((s) {
       final index = s.playbackState.index;
