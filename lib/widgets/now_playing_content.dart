@@ -1006,18 +1006,16 @@ class _ExclusivePlaybackNote extends ConsumerWidget {
 }
 
 /// A 48dp action beside the title, whatever the text size: [icon] at 20dp in
-/// [color], named [label] by its tooltip and to assistive technology. Inert
-/// while the server is away, and where [onTap] is null.
+/// the neutral `textSecondary`, named [label] by its tooltip and to assistive
+/// technology. Inert while the server is away, and where [onTap] is null.
 class _TitleAction extends ConsumerWidget {
   final String label;
   final IconData icon;
-  final Color color;
   final VoidCallback? onTap;
 
   const _TitleAction({
     required this.label,
     required this.icon,
-    required this.color,
     required this.onTap,
   });
 
@@ -1043,7 +1041,7 @@ class _TitleAction extends ConsumerWidget {
           child: TransportButton(
             hitDiameter: size,
             onTap: onTap,
-            child: Icon(icon, size: 20, color: color),
+            child: Icon(icon, size: 20, color: KalinkaColors.textSecondary),
           ),
         ),
       ),
@@ -1088,7 +1086,6 @@ class _DislikeButtonState extends ConsumerState<_DislikeButton> {
   Widget build(BuildContext context) => _TitleAction(
     label: 'Not like this',
     icon: Icons.thumb_down_outlined,
-    color: KalinkaColors.textSecondary,
     onTap: _sending ? null : _dislike,
   );
 }
@@ -1138,7 +1135,6 @@ class _FavoriteButtonState extends ConsumerState<_FavoriteButton> {
     return _TitleAction(
       label: favorite ? 'Remove from favourites' : 'Add to favourites',
       icon: favorite ? Icons.favorite_rounded : Icons.favorite_border_rounded,
-      color: favorite ? KalinkaColors.accent : KalinkaColors.textSecondary,
       onTap: _sending || !known || trackId == null
           ? null
           : () => _toggle(trackId, adding: !favorite),
