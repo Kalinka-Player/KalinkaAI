@@ -1,5 +1,8 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show ProviderListenable;
 
 import '../providers/connection_state_provider.dart';
 import '../providers/kalinka_player_api_provider.dart';
@@ -7,23 +10,28 @@ import '../providers/queue_features_provider.dart';
 import '../providers/server_refusal.dart';
 import '../providers/toast_provider.dart';
 import '../theme/app_theme.dart';
-import 'tap_highlight.dart';
+import 'search_cards/action_pill_button.dart';
 
-const _offerLine = 'Turn on to add tracks like these and play on';
+const _offerMessage =
+    'No more tracks in the queue. Continue with something similar?';
+
+/// A [WidgetRef]'s or a [Ref]'s `read`, which [switchKeepPlaying] reads
+/// providers through.
+typedef ProviderRead = T Function<T>(ProviderListenable<T> provider);
 
 /// Saves the server's Keep playing as [enabled] and says in a toast what came
 /// of it: the tracks it added, that none came where the queue had run out and
 /// asked for them, or why it could not be saved. [inPanel] as for
 /// [ToastNotifier.show].
 Future<void> switchKeepPlaying(
-  WidgetRef ref,
+  ProviderRead read,
   bool enabled, {
   bool inPanel = false,
 }) async {
-  final toast = ref.read(toastProvider.notifier);
-  final asksForTracks = enabled && ref.read(keepPlayingOfferedProvider);
+  final toast = read(toastProvider.notifier);
+  final asksForTracks = enabled && read(keepPlayingOfferedProvider);
   try {
-    final added = await ref.read(kalinkaProxyProvider).setKeepPlaying(enabled);
+    final added = await read(kalinkaProxyProvider).setKeepPlaying(enabled);
     if (added > 0) {
       toast.show(
         added == 1
@@ -45,128 +53,131 @@ Future<void> switchKeepPlaying(
   }
 }
 
-/// What Up next shows when nothing follows the playing track: "Queue is
-/// empty", or, where [keepPlayingOfferedProvider] holds, an offer to turn Keep
-/// playing on, which carries the queue on in one tap. The offer stays, inert,
-/// until the server answers, so one tap asks once. Takes the width it is given,
-/// and fits a two-line row's height.
-class EmptyUpNext extends ConsumerStatefulWidget {
-  const EmptyUpNext({super.key});
-
+/// The run-out offer's request to turn Keep playing on: true while it runs,
+/// wherever the offer shows, so one tap asks once.
+class KeepPlayingOfferRequest extends Notifier<bool> {
   @override
-  ConsumerState<EmptyUpNext> createState() => _EmptyUpNextState();
+  bool build() => false;
+
+  /// Turns Keep playing on and says what came of it; nothing while the last
+  /// request is still under way.
+  Future<void> accept() async {
+    if (state) return;
+    state = true;
+    try {
+      await switchKeepPlaying(ref.read, true, inPanel: true);
+    } finally {
+      if (ref.mounted) state = false;
+    }
+  }
 }
 
-class _EmptyUpNextState extends ConsumerState<EmptyUpNext> {
-  bool _asking = false;
+final keepPlayingOfferRequestProvider =
+    NotifierProvider<KeepPlayingOfferRequest, bool>(
+      KeepPlayingOfferRequest.new,
+    );
 
-  Future<void> _turnOn() async {
-    setState(() => _asking = true);
-    await switchKeepPlaying(ref, true, inPanel: true);
-    if (mounted) setState(() => _asking = false);
+/// Whether Up next offers Keep playing: where [keepPlayingOfferedProvider]
+/// holds, and until the server answers the offer's request, so the offer does
+/// not give way to "Queue is empty" as the setting comes on.
+final keepPlayingOfferShownProvider = Provider<bool>(
+  (ref) =>
+      ref.watch(keepPlayingOfferRequestProvider) ||
+      ref.watch(keepPlayingOfferedProvider),
+);
+
+/// What Up next shows when nothing follows the playing track: "Queue is
+/// empty", [emptyHeight] tall where that is set, or, where
+/// [keepPlayingOfferShownProvider] holds, a short message offering to keep
+/// playing with one button that turns Keep playing on. The offer takes its
+/// natural height, which [offerHeight] measures; only its button is tappable.
+class EmptyUpNext extends ConsumerWidget {
+  const EmptyUpNext({super.key, this.emptyHeight});
+
+  final double? emptyHeight;
+
+  static const _inset = 16.0;
+  static const _vertical = 8.0;
+  static const _gap = 12.0;
+
+  /// How tall the offer sets in [width], its message wrapped as it is laid
+  /// out, so what holds it can make room or leave it out.
+  static double offerHeight(BuildContext context, double width) {
+    final painter = TextPainter(
+      text: TextSpan(
+        text: _offerMessage,
+        style: DefaultTextStyle.of(context).style
+            .merge(KalinkaTextStyles.queueItemArtist),
+      ),
+      textAlign: TextAlign.center,
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+      textHeightBehavior: DefaultTextHeightBehavior.maybeOf(context),
+    )..layout(maxWidth: math.max(0, width - 2 * _inset));
+    final message = painter.height;
+    painter.dispose();
+    return 2 * _vertical + message + _gap + ActionPillButton.heightOf(context);
   }
 
   @override
-  Widget build(BuildContext context) {
-    if (!_asking && !ref.watch(keepPlayingOfferedProvider)) {
-      return Center(
+  Widget build(BuildContext context, WidgetRef ref) {
+    if (ref.watch(keepPlayingOfferShownProvider)) {
+      return const _KeepPlayingOffer();
+    }
+    return SizedBox(
+      height: emptyHeight,
+      child: Center(
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
+          padding: const EdgeInsets.symmetric(horizontal: _inset),
           child: Text(
             'Queue is empty',
             style: KalinkaTextStyles.queueItemArtist,
             textAlign: TextAlign.center,
           ),
         ),
-      );
-    }
-    final away = ref.watch(
-      connectionStateProvider.select((s) => s.isInterrupted),
-    );
-    return _KeepPlayingOffer(
-      asking: _asking,
-      onTap: _asking || away ? null : _turnOn,
+      ),
     );
   }
 }
 
-class _KeepPlayingOffer extends StatelessWidget {
-  final bool asking;
-  final VoidCallback? onTap;
-
-  const _KeepPlayingOffer({required this.asking, required this.onTap});
-
-  static const _tileSize = 40.0;
+class _KeepPlayingOffer extends ConsumerWidget {
+  const _KeepPlayingOffer();
 
   @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      button: true,
-      enabled: onTap != null,
-      label: 'Keep playing. $_offerLine',
-      child: TextButton(
-        onPressed: onTap,
-        style: TextButton.styleFrom(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          alignment: Alignment.centerLeft,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        ).copyWith(overlayColor: kalinkaRowOverlay),
-        child: ExcludeSemantics(
-          child: Row(
-            children: [
-              Container(
-                width: _tileSize,
-                height: _tileSize,
-                decoration: BoxDecoration(
-                  color: KalinkaColors.surfaceElevated,
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                alignment: Alignment.center,
-                child: asking
-                    ? const SizedBox.square(
-                        dimension: 16,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: KalinkaColors.textSecondary,
-                        ),
-                      )
-                    : const Icon(
-                        Icons.all_inclusive_rounded,
-                        size: 20,
-                        color: KalinkaColors.textSecondary,
-                      ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Keep playing',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: KalinkaTextStyles.queueItemTitle.copyWith(
-                        fontSize: 14,
-                        height: 1.25,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      _offerLine,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: KalinkaTextStyles.queueItemArtist.copyWith(
-                        fontSize: 12,
-                        height: 1.25,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+  Widget build(BuildContext context, WidgetRef ref) {
+    final asking = ref.watch(keepPlayingOfferRequestProvider);
+    final away = ref.watch(
+      connectionStateProvider.select((s) => s.isInterrupted),
+    );
+    return Padding(
+      padding: const EdgeInsets.symmetric(
+        horizontal: EmptyUpNext._inset,
+        vertical: EmptyUpNext._vertical,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            _offerMessage,
+            style: KalinkaTextStyles.queueItemArtist,
+            textAlign: TextAlign.center,
           ),
-        ),
+          const SizedBox(height: EmptyUpNext._gap),
+          // At the largest text in the narrowest pane the label would not fit.
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: ActionPillButton(
+              label: 'Turn on Keep playing',
+              accent: true,
+              busy: asking,
+              onTap: away
+                  ? null
+                  : () => ref
+                        .read(keepPlayingOfferRequestProvider.notifier)
+                        .accept(),
+            ),
+          ),
+        ],
       ),
     );
   }

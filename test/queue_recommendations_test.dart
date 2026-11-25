@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show RenderParagraph;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
@@ -177,30 +178,48 @@ Future<ProviderContainer> _pumpTray(
   return container;
 }
 
+const _upNextHeight = 560.0;
+
 /// Where Up next comes to an end: under Now Playing, and in the queue.
 enum _UpNext { nowPlaying, queue }
 
-/// [place] over [queue].
+/// [place] over [queue], [width] wide with text at [textScale]. Now Playing's
+/// preview fits the room left under [above] where that is set, as the player
+/// fits it; otherwise it shows below the fold, as on the phone's sheet.
 Future<ProviderContainer> _pumpUpNext(
   WidgetTester tester,
   _UpNext place, {
   required PlayQueueState queue,
   List<ModuleInfo>? modules,
   _QueueApi? api,
+  double width = 400,
+  double textScale = 1,
+  double? above,
 }) async {
   final container = await _pump(
     tester,
-    SizedBox(
-      width: 400,
-      height: 700,
-      child: switch (place) {
-        _UpNext.nowPlaying => const CustomScrollView(
-          slivers: [
-            SliverUpNextPreview(canOpenQueue: false, fitToSpace: false),
-          ],
+    Builder(
+      builder: (context) => MediaQuery(
+        data: MediaQuery.of(context)
+            .copyWith(textScaler: TextScaler.linear(textScale)),
+        child: SizedBox(
+          width: width,
+          height: _upNextHeight,
+          child: switch (place) {
+            _UpNext.nowPlaying => CustomScrollView(
+              slivers: [
+                if (above != null)
+                  SliverToBoxAdapter(child: SizedBox(height: above)),
+                SliverUpNextPreview(
+                  canOpenQueue: false,
+                  fitToSpace: above != null,
+                ),
+              ],
+            ),
+            _UpNext.queue => const QueueZone(),
+          },
         ),
-        _UpNext.queue => const QueueZone(),
-      },
+      ),
     ),
     api: api ?? _QueueApi(),
     queue: queue,
@@ -718,7 +737,10 @@ void main() {
   });
 
   group('where the queue has run out', () {
-    final offer = find.text('Keep playing');
+    final offer = find.text('Turn on Keep playing');
+    final message = find.text(
+      'No more tracks in the queue. Continue with something similar?',
+    );
     final empty = find.text('Queue is empty');
 
     for (final place in _UpNext.values) {
@@ -727,13 +749,49 @@ void main() {
       ) async {
         await _pumpUpNext(tester, place, queue: _runOut);
 
+        expect(message, findsOneWidget);
         expect(offer, findsOneWidget);
-        expect(
-          find.text('Turn on to add tracks like these and play on'),
-          findsOneWidget,
-        );
         expect(empty, findsNothing);
+        expect(
+          tester.getCenter(offer).dy,
+          greaterThan(tester.getRect(message).bottom),
+        );
+        expect(
+          tester.getCenter(offer).dx,
+          closeTo(tester.getCenter(message).dx, 0.5),
+        );
+        expect(find.byIcon(Icons.all_inclusive_rounded), findsNothing);
       });
+
+      testWidgets(
+        '${place.name}: only the button takes the tap, and lights only itself',
+        (tester) async {
+          final api = _QueueApi();
+          await _pumpUpNext(tester, place, queue: _runOut, api: api);
+
+          final inks = find.ancestor(of: offer, matching: find.byType(InkWell));
+          expect(inks, findsOneWidget);
+          expect(
+            tester.widget<InkWell>(inks).customBorder,
+            isA<StadiumBorder>(),
+          );
+          final ink = tester.getRect(inks);
+          expect(ink.height, lessThanOrEqualTo(48));
+          expect(ink.top, greaterThan(tester.getRect(message).bottom));
+          expect(
+            find.ancestor(of: message, matching: find.byType(InkWell)),
+            findsNothing,
+          );
+          expect(
+            find.ancestor(of: message, matching: find.byType(GestureDetector)),
+            findsNothing,
+          );
+
+          await tester.tap(message, warnIfMissed: false);
+          await tester.pump();
+          expect(api.keepPlayingSet, isEmpty);
+        },
+      );
 
       testWidgets('${place.name}: offers it once the queue has played out', (
         tester,
@@ -765,9 +823,18 @@ void main() {
           api: api,
         );
 
+        final button = find.ancestor(of: offer, matching: find.byType(InkWell));
+        final before = tester.getRect(button);
         await tester.tap(offer);
         await tester.pump();
-        expect(find.byType(CircularProgressIndicator), findsOneWidget);
+        expect(
+          find.descendant(
+            of: button,
+            matching: find.byType(CircularProgressIndicator),
+          ),
+          findsOneWidget,
+        );
+        expect(tester.getRect(button), before);
         await tester.tap(offer, warnIfMissed: false);
         await tester.pump();
         expect(api.keepPlayingSet, [true]);
@@ -904,5 +971,84 @@ void main() {
       expect(offer, findsOneWidget);
       await tester.pump(const Duration(seconds: 30));
     });
+
+    group('in Now Playing\'s preview', () {
+      testWidgets('takes the height it needs where the player has room', (
+        tester,
+      ) async {
+        await _pumpUpNext(tester, _UpNext.nowPlaying, queue: _runOut, above: 0);
+
+        expect(offer.hitTestable(), findsOneWidget);
+        expect(
+          tester
+              .getRect(find.byKey(const ValueKey('now-playing-up-next')))
+              .bottom,
+          lessThanOrEqualTo(_upNextHeight),
+        );
+        expect(tester.takeException(), isNull);
+      });
+
+      testWidgets('is left out where only a row would fit', (tester) async {
+        const tight = _upNextHeight - 48 - 16 - 80;
+        await _pumpUpNext(
+          tester,
+          _UpNext.nowPlaying,
+          queue: _runOut,
+          above: tight,
+        );
+        expect(find.byKey(const ValueKey('now-playing-up-next')), findsNothing);
+
+        await _pumpUpNext(
+          tester,
+          _UpNext.nowPlaying,
+          queue: _queueFrom(
+            ['localfiles', 'localfiles'],
+            index: 1,
+            keepPlaying: true,
+          ),
+          above: tight,
+        );
+        expect(empty, findsOneWidget);
+        expect(tester.takeException(), isNull);
+      });
+    });
+
+    for (final place in _UpNext.values) {
+      for (final (width, textScale) in [
+        (320.0, 2.0),
+        (320.0, 1.0),
+        (400.0, 2.0),
+      ]) {
+        testWidgets(
+          '${place.name}: wraps whole and fits at $width wide, text $textScale',
+          (tester) async {
+            await _pumpUpNext(
+              tester,
+              place,
+              queue: _runOut,
+              width: width,
+              textScale: textScale,
+              above: place == _UpNext.nowPlaying ? 0 : null,
+            );
+
+            expect(tester.takeException(), isNull);
+            expect(offer.hitTestable(), findsOneWidget);
+            final text = tester.widget<Text>(message);
+            expect(text.maxLines, isNull);
+            expect(text.overflow, isNull);
+            final lines = tester
+                .renderObject<RenderParagraph>(message)
+                .didExceedMaxLines;
+            expect(lines, isFalse);
+            final button = tester.getRect(
+              find.ancestor(of: offer, matching: find.byType(InkWell)),
+            );
+            expect(button.left, greaterThanOrEqualTo(0));
+            expect(button.right, lessThanOrEqualTo(width));
+            expect(button.bottom, lessThanOrEqualTo(_upNextHeight));
+          },
+        );
+      }
+    }
   });
 }

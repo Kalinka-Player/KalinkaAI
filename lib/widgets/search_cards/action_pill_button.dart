@@ -54,6 +54,10 @@ class ActionPillButton extends StatelessWidget {
   /// than an action. Null leaves it unsaid.
   final bool? selected;
   final bool enabled;
+
+  /// A request it made is under way: it takes no taps, and a labelled pill
+  /// holds a spinner in place of what it says, at the same width.
+  final bool busy;
   final VoidCallback? onTap;
 
   /// Overrides for transient states (e.g. gold "Added ✓" confirmation).
@@ -72,6 +76,7 @@ class ActionPillButton extends StatelessWidget {
     this.circular = false,
     this.selected,
     this.enabled = true,
+    this.busy = false,
     this.onTap,
     this.foregroundOverride,
     this.borderOverride,
@@ -109,7 +114,7 @@ class ActionPillButton extends StatelessWidget {
             _side,
             _vertical,
           );
-    final interactive = enabled && onTap != null;
+    final interactive = enabled && !busy && onTap != null;
     final activate = interactive
         ? () => KalinkaPopupOrigin.run(context, onTap!)
         : null;
@@ -142,16 +147,19 @@ class ActionPillButton extends StatelessWidget {
                         _lineHeightOf(context, labelStyle),
                       ),
                     ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        ?leading,
-                        if (icon != null)
-                          Icon(icon, size: _iconSize, color: fg),
-                        if (mark && label != null)
-                          const SizedBox(width: _markGap),
-                        if (label != null) Text(label!, style: labelStyle),
-                      ],
+                    child: _busyOver(
+                      fg,
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          ?leading,
+                          if (icon != null)
+                            Icon(icon, size: _iconSize, color: fg),
+                          if (mark && label != null)
+                            const SizedBox(width: _markGap),
+                          if (label != null) Text(label!, style: labelStyle),
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -175,11 +183,25 @@ class ActionPillButton extends StatelessWidget {
     return Semantics(
       label: semanticsLabel ?? label,
       button: true,
-      enabled: enabled,
+      enabled: enabled && !busy,
       selected: selected,
       child: button,
     );
   }
+
+  /// [content] as it is, or kept for its size under a spinner while [busy].
+  Widget _busyOver(Color color, Widget content) => !busy
+      ? content
+      : Stack(
+          alignment: Alignment.center,
+          children: [
+            Visibility.maintain(visible: false, child: content),
+            SizedBox.square(
+              dimension: 16,
+              child: CircularProgressIndicator(strokeWidth: 2, color: color),
+            ),
+          ],
+        );
 
   /// How wide a pill with an icon and no label sets.
   static const iconOnlyWidth = 2 * 11 + _iconSize;
