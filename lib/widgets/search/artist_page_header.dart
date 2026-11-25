@@ -25,8 +25,8 @@ class ArtistPageHeader extends ConsumerWidget {
   /// switching button where the pane is narrow.
   final ListingLayout? presentation;
 
-  /// On the name's row, which holds Pin and the heart, so the page can tell
-  /// when they have scrolled under the bar.
+  /// On the name's row with Pin and the heart, or on Pin where it goes under
+  /// the name, so the page can tell when both have scrolled under the bar.
   final Key? actionsKey;
 
   /// On Grid/List, so the page can tell when it has scrolled under the bar.
@@ -142,7 +142,6 @@ class ArtistPageHeader extends ConsumerWidget {
                           // name a few letters a line, so it goes under it,
                           // its glyph at the name's edge.
                           return Column(
-                            key: actionsKey,
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               withHeart(title),
@@ -153,7 +152,10 @@ class ArtistPageHeader extends ConsumerWidget {
                                       2,
                                   0,
                                 ),
-                                child: pinButton,
+                                child: KeyedSubtree(
+                                  key: actionsKey,
+                                  child: pinButton,
+                                ),
                               ),
                             ],
                           );
