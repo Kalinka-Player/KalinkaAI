@@ -6,16 +6,21 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data_model/data_model.dart';
 import '../providers/app_state_provider.dart';
 import '../providers/connection_state_provider.dart';
+import '../providers/kalinka_player_api_provider.dart';
+import '../providers/now_playing_favorite_provider.dart';
 import '../providers/now_playing_provider.dart';
+import '../providers/queue_features_provider.dart';
 import '../providers/search_session_provider.dart';
+import '../providers/server_refusal.dart';
 import '../providers/shell_nav_provider.dart';
+import '../providers/toast_provider.dart';
 import '../providers/url_resolver.dart';
 import '../theme/app_theme.dart';
 import '../utils/click_cursor.dart';
 import '../utils/playback_utils.dart';
 import '../providers/source_modules_provider.dart';
 import 'away.dart';
-import 'bit_perfect_badge.dart';
+import 'playback_format_badge.dart';
 import 'browse_metadata_link.dart';
 import 'kalinka_dialog.dart';
 import 'kiosk/kiosk_enter_button.dart';
@@ -122,6 +127,8 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
     );
     ref.watch(playbackControlProvider.select((c) => c.isExclusive));
     ref.watch(nowPlayingMetadataLinksProvider);
+    ref.watch(dislikeAvailableProvider);
+    ref.watch(favoriteAvailableProvider);
     final away = ref.watch(
       connectionStateProvider.select((s) => s.isInterrupted),
     );
@@ -407,6 +414,7 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
                                   _metadataHeight(
                                     currentTrack,
                                     available.maxWidth,
+                                    leftAligned: false,
                                   ) -
                                   20;
                         final fittedArtSize = coverHeight.clamp(0.0, artSize);
@@ -424,6 +432,7 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
                                     _metadataHeight(
                                       currentTrack,
                                       metadataWidth,
+                                      leftAligned: true,
                                     ),
                                   ),
                                 ),
@@ -568,6 +577,7 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
           track,
           detailsWidth,
           grow: 32 / KalinkaTextStyles.expandedTitle.fontSize!,
+          leftAligned: true,
         ) +
         ((outputInHeader ? 156 : 200) +
                 (failed ? 28 : 0) +
@@ -580,12 +590,18 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
   /// Space reserved for stacked metadata before sizing the cover. Measuring
   /// these few labels keeps long names and system text from pushing controls
   /// below the viewport; it runs only when the presentation is laid out.
-  double _metadataHeight(Track? track, double width, {double grow = 1}) {
+  double _metadataHeight(
+    Track? track,
+    double width, {
+    double grow = 1,
+    required bool leftAligned,
+  }) {
     double line(
       String text,
       TextStyle style,
       int maxLines, {
       bool linked = false,
+      double trailing = 0,
     }) {
       final painter =
           TextPainter(
@@ -596,7 +612,7 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
           )..layout(
             maxWidth: math.max(
               0,
-              width - (linked ? BrowseMetadataLink.chevronWidth : 0),
+              width - trailing - (linked ? BrowseMetadataLink.chevronWidth : 0),
             ),
           );
       final height = painter.height;
@@ -608,11 +624,21 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
           : height;
     }
 
+    final (:dislike, :favorite) = _titleActions();
+    final actions = [dislike, favorite].nonNulls.length;
     var height =
-        line(
-          track?.title ?? 'No track',
-          _grown(KalinkaTextStyles.expandedTitle, grow),
-          2,
+        math.max(
+          line(
+            track?.title ?? 'No track',
+            _grown(KalinkaTextStyles.expandedTitle, grow),
+            2,
+            trailing: actions == 0
+                ? 0
+                : leftAligned
+                ? _TitleAction.gap + actions * _TitleAction.size
+                : 2 * (_TitleAction.gap + _TitleAction.size),
+          ),
+          actions == 0 ? 0.0 : _TitleAction.size,
         ) +
         6 * grow +
         line(
@@ -656,7 +682,10 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
   }) {
     final room = width / MediaQuery.textScalerOf(context).scale(260);
     for (var grow = room.clamp(1.0, 1.6); grow > 1; grow -= 0.05) {
-      if (_metadataHeight(track, width, grow: grow) <= height) return grow;
+      if (_metadataHeight(track, width, grow: grow, leftAligned: true) <=
+          height) {
+        return grow;
+      }
     }
     return 1;
   }
@@ -688,6 +717,39 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
           ),
         );
 
+  /// What the title is flanked by, where the track takes it; the same for
+  /// laying it out as for measuring it.
+  ({Widget? dislike, Widget? favorite}) _titleActions() => (
+    dislike: ref.read(dislikeAvailableProvider) ? const _DislikeButton() : null,
+    favorite: ref.read(favoriteAvailableProvider)
+        ? const _FavoriteButton()
+        : null,
+  );
+
+  /// The title with [_titleActions] at the details' edges, however long the
+  /// title is: both at the right edge, thumb-down first, where the details
+  /// are flush left; else the thumb-down at the left edge and the heart at the
+  /// right, in slots of one width, so the title keeps the centre with only
+  /// one of them. Their tops meet the title's top.
+  Widget _titleWithActions(Widget title, {required bool leftAligned}) {
+    final (:dislike, :favorite) = _titleActions();
+    if (dislike == null && favorite == null) return title;
+    const gap = SizedBox(width: _TitleAction.gap);
+    const empty = SizedBox(width: _TitleAction.size);
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: leftAligned
+          ? [Expanded(child: title), gap, ?dislike, ?favorite]
+          : [
+              dislike ?? empty,
+              gap,
+              Expanded(child: title),
+              gap,
+              favorite ?? empty,
+            ],
+    );
+  }
+
   static String _albumLine(Album album) =>
       album.year != null ? '${album.title} · ${album.year}' : album.title;
 
@@ -710,6 +772,15 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
     bool compact = false,
   }) {
     final textAlign = leftAligned ? TextAlign.left : TextAlign.center;
+    final title = Text(
+      currentTrack?.title ?? 'No track',
+      style: compact
+          ? KalinkaTextStyles.expandedTitle.copyWith(fontSize: 32)
+          : _grown(KalinkaTextStyles.expandedTitle, grow),
+      textAlign: textAlign,
+      maxLines: 2,
+      overflow: TextOverflow.ellipsis,
+    );
     return Column(
       key: const ValueKey('now-playing-metadata'),
       mainAxisSize: MainAxisSize.min,
@@ -717,15 +788,7 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
           ? CrossAxisAlignment.start
           : CrossAxisAlignment.center,
       children: [
-        Text(
-          currentTrack?.title ?? 'No track',
-          style: compact
-              ? KalinkaTextStyles.expandedTitle.copyWith(fontSize: 32)
-              : _grown(KalinkaTextStyles.expandedTitle, grow),
-          textAlign: textAlign,
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-        ),
+        _titleWithActions(title, leftAligned: leftAligned),
         SizedBox(height: 6 * grow),
         BrowseMetadataLink(
           label: currentTrack?.performer?.name ?? '\u2014',
@@ -822,7 +885,7 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
                       ),
                     ),
                   ],
-                  const BitPerfectBadge(),
+                  const PlaybackFormatBadge(),
                 ],
               ),
             ),
@@ -938,6 +1001,143 @@ class _ExclusivePlaybackNote extends ConsumerWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// A 48dp action beside the title, whatever the text size: [icon] at 20dp in
+/// the neutral `textSecondary`, named [label] by its tooltip and to assistive
+/// technology. Inert while the server is away, and where [onTap] is null.
+class _TitleAction extends ConsumerWidget {
+  final String label;
+  final IconData icon;
+  final VoidCallback? onTap;
+
+  const _TitleAction({
+    required this.label,
+    required this.icon,
+    required this.onTap,
+  });
+
+  static const size = 48.0;
+
+  /// Between the title and the actions beside it.
+  static const gap = 4.0;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final away = ref.watch(
+      connectionStateProvider.select((s) => s.isInterrupted),
+    );
+    return AwayLock(
+      away: away,
+      child: Semantics(
+        label: label,
+        button: true,
+        enabled: onTap != null,
+        child: Tooltip(
+          message: label,
+          excludeFromSemantics: true,
+          child: TransportButton(
+            hitDiameter: size,
+            onTap: onTap,
+            child: Icon(icon, size: 20, color: KalinkaColors.textSecondary),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Turns the playing track down for this queue and skips it. Inert while its
+/// last tap is answered, so one tap never skips twice.
+class _DislikeButton extends ConsumerStatefulWidget {
+  const _DislikeButton();
+
+  @override
+  ConsumerState<_DislikeButton> createState() => _DislikeButtonState();
+}
+
+class _DislikeButtonState extends ConsumerState<_DislikeButton> {
+  bool _sending = false;
+
+  Future<void> _dislike() async {
+    final toast = ref.read(toastProvider.notifier);
+    setState(() => _sending = true);
+    try {
+      if (await ref.read(kalinkaProxyProvider).dislikeCurrent()) {
+        toast.show(
+          'Skipped — this queue will avoid tracks like it',
+          inPanel: true,
+        );
+      }
+    } catch (e) {
+      toast.show(
+        e is ServerRefusalException ? '$e' : 'Could not skip this track',
+        isError: true,
+        inPanel: true,
+      );
+    } finally {
+      if (mounted) setState(() => _sending = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => _TitleAction(
+    label: 'Not like this',
+    icon: Icons.thumb_down_outlined,
+    onTap: _sending ? null : _dislike,
+  );
+}
+
+/// Marks the playing track a favourite of its source, or no longer one,
+/// showing the change at once and undoing it with an error toast if the
+/// server does not make it. Inert until the source's favourites are first
+/// known, and while its last tap is answered, so one tap sends once.
+class _FavoriteButton extends ConsumerStatefulWidget {
+  const _FavoriteButton();
+
+  @override
+  ConsumerState<_FavoriteButton> createState() => _FavoriteButtonState();
+}
+
+class _FavoriteButtonState extends ConsumerState<_FavoriteButton> {
+  bool _sending = false;
+
+  Future<void> _toggle(String trackId, {required bool adding}) async {
+    final toast = ref.read(toastProvider.notifier);
+    final favorites = ref.read(favoriteTracksProvider.notifier);
+    setState(() => _sending = true);
+    try {
+      await favorites.toggle(trackId);
+    } catch (e) {
+      toast.show(
+        e is ServerRefusalException
+            ? '$e'
+            : adding
+            ? 'Could not add this track to favourites'
+            : 'Could not remove this track from favourites',
+        isError: true,
+        inPanel: true,
+      );
+    } finally {
+      if (mounted) setState(() => _sending = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final trackId = ref.watch(nowPlayingTrackProvider.select((t) => t?.id));
+    final favorites = ref.watch(favoriteTracksProvider);
+    final favorite =
+        trackId != null && (favorites.value?.contains(trackId) ?? false);
+    final known = favorites.hasValue;
+    return _TitleAction(
+      label: favorite ? 'Remove from favourites' : 'Add to favourites',
+      icon: favorite ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+      onTap: _sending || !known || trackId == null
+          ? null
+          : () => _toggle(trackId, adding: !favorite),
     );
   }
 }

@@ -1824,6 +1824,13 @@ abstract final class ModuleCapability {
 
   /// The plugin exposes a browsable catalog root in `/browse`.
   static const catalogs = 'catalogs';
+
+  /// The source suggests tracks to follow one of its own, which the server's
+  /// "similar tracks" and Keep playing ask it for.
+  static const continuation = 'continuation';
+
+  /// The source keeps the favourites it is given, so marking one sticks.
+  static const favorites = 'favorites';
 }
 
 class ModuleInfo {

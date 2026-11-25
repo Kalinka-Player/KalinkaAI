@@ -1210,7 +1210,8 @@ class Clipping extends $pb.GeneratedMessage {
       _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<Clipping>(create);
   static Clipping? _defaultInstance;
 
-  /// Samples clamped since the source began.
+  /// Samples clamped with the current room correction settings in this play.
+  /// Zero clears a previous clipping report after a settings change.
   @$pb.TagNumber(1)
   $fixnum.Int64 get clippedSamples => $_getI64(0);
   @$pb.TagNumber(1)
@@ -3933,6 +3934,7 @@ class DspProfile_Band extends $pb.GeneratedMessage {
   @$pb.TagNumber(2)
   void clearFrequencyHz() => $_clearField(2);
 
+  /// Zero for a pass band.
   @$pb.TagNumber(3)
   $core.double get gainDb => $_getN(2);
   @$pb.TagNumber(3)
@@ -3942,6 +3944,7 @@ class DspProfile_Band extends $pb.GeneratedMessage {
   @$pb.TagNumber(3)
   void clearGainDb() => $_clearField(3);
 
+  /// Zero for a first-order band.
   @$pb.TagNumber(4)
   $core.double get q => $_getN(3);
   @$pb.TagNumber(4)
@@ -4038,6 +4041,69 @@ class DspProfile extends $pb.GeneratedMessage {
 
   @$pb.TagNumber(5)
   $pb.PbList<DspProfile_Band> get right => $_getList(4);
+}
+
+/// A named convolution preset. Each WAV contains filter coefficients for one
+/// distinct sample rate. Mono applies to both speakers, stereo is independent.
+class FirProfile extends $pb.GeneratedMessage {
+  factory FirProfile({
+    $core.String? name,
+    $core.Iterable<$core.List<$core.int>>? impulseWav,
+  }) {
+    final result = create();
+    if (name != null) result.name = name;
+    if (impulseWav != null) result.impulseWav.addAll(impulseWav);
+    return result;
+  }
+
+  FirProfile._();
+
+  factory FirProfile.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory FirProfile.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'FirProfile',
+      package:
+          const $pb.PackageName(_omitMessageNames ? '' : 'kalinka.renderer.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'name')
+    ..p<$core.List<$core.int>>(
+        2, _omitFieldNames ? '' : 'impulseWav', $pb.PbFieldType.PY)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  FirProfile clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  FirProfile copyWith(void Function(FirProfile) updates) =>
+      super.copyWith((message) => updates(message as FirProfile)) as FirProfile;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static FirProfile create() => FirProfile._();
+  @$core.override
+  FirProfile createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static FirProfile getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<FirProfile>(create);
+  static FirProfile? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get name => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set name($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasName() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearName() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $pb.PbList<$core.List<$core.int>> get impulseWav => $_getList(1);
 }
 
 class ConfigRequest extends $pb.GeneratedMessage {
@@ -4150,10 +4216,12 @@ class ConfigUpdate extends $pb.GeneratedMessage {
   factory ConfigUpdate({
     $core.Iterable<ConfigUpdate_Setting>? settings,
     $core.String? dspProfileUrl,
+    $core.String? firProfileUrl,
   }) {
     final result = create();
     if (settings != null) result.settings.addAll(settings);
     if (dspProfileUrl != null) result.dspProfileUrl = dspProfileUrl;
+    if (firProfileUrl != null) result.firProfileUrl = firProfileUrl;
     return result;
   }
 
@@ -4174,6 +4242,7 @@ class ConfigUpdate extends $pb.GeneratedMessage {
     ..pPM<ConfigUpdate_Setting>(1, _omitFieldNames ? '' : 'settings',
         subBuilder: ConfigUpdate_Setting.create)
     ..aOS(2, _omitFieldNames ? '' : 'dspProfileUrl')
+    ..aOS(3, _omitFieldNames ? '' : 'firProfileUrl')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -4207,6 +4276,15 @@ class ConfigUpdate extends $pb.GeneratedMessage {
   $core.bool hasDspProfileUrl() => $_has(1);
   @$pb.TagNumber(2)
   void clearDspProfileUrl() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get firProfileUrl => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set firProfileUrl($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasFirProfileUrl() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearFirProfileUrl() => $_clearField(3);
 }
 
 /// Core -> renderer: install a published renderer release and restart into it.
@@ -4581,6 +4659,87 @@ class ConfigOption extends $pb.GeneratedMessage {
   void clearDescription() => $_clearField(3);
 }
 
+/// Magnitude preview of the selected impulse at sample_rate, independent of PEQ.
+class FirResponse extends $pb.GeneratedMessage {
+  factory FirResponse({
+    $core.int? sampleRate,
+    $core.int? sourceRate,
+    $core.Iterable<$core.double>? leftDb,
+    $core.Iterable<$core.double>? rightDb,
+  }) {
+    final result = create();
+    if (sampleRate != null) result.sampleRate = sampleRate;
+    if (sourceRate != null) result.sourceRate = sourceRate;
+    if (leftDb != null) result.leftDb.addAll(leftDb);
+    if (rightDb != null) result.rightDb.addAll(rightDb);
+    return result;
+  }
+
+  FirResponse._();
+
+  factory FirResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory FirResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'FirResponse',
+      package:
+          const $pb.PackageName(_omitMessageNames ? '' : 'kalinka.renderer.v1'),
+      createEmptyInstance: create)
+    ..aI(1, _omitFieldNames ? '' : 'sampleRate', fieldType: $pb.PbFieldType.OU3)
+    ..aI(2, _omitFieldNames ? '' : 'sourceRate', fieldType: $pb.PbFieldType.OU3)
+    ..p<$core.double>(3, _omitFieldNames ? '' : 'leftDb', $pb.PbFieldType.KF)
+    ..p<$core.double>(4, _omitFieldNames ? '' : 'rightDb', $pb.PbFieldType.KF)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  FirResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  FirResponse copyWith(void Function(FirResponse) updates) =>
+      super.copyWith((message) => updates(message as FirResponse))
+          as FirResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static FirResponse create() => FirResponse._();
+  @$core.override
+  FirResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static FirResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<FirResponse>(create);
+  static FirResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.int get sampleRate => $_getIZ(0);
+  @$pb.TagNumber(1)
+  set sampleRate($core.int value) => $_setUnsignedInt32(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasSampleRate() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearSampleRate() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.int get sourceRate => $_getIZ(1);
+  @$pb.TagNumber(2)
+  set sourceRate($core.int value) => $_setUnsignedInt32(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasSourceRate() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearSourceRate() => $_clearField(2);
+
+  /// Uniform in log frequency, from 20 Hz to min(20 kHz, Nyquist), inclusive.
+  @$pb.TagNumber(3)
+  $pb.PbList<$core.double> get leftDb => $_getList(2);
+
+  @$pb.TagNumber(4)
+  $pb.PbList<$core.double> get rightDb => $_getList(3);
+}
+
 class ConfigField extends $pb.GeneratedMessage {
   factory ConfigField({
     $core.String? path,
@@ -4598,6 +4757,9 @@ class ConfigField extends $pb.GeneratedMessage {
     ConfigWidget? widget,
     $core.String? helpDetails,
     ConfigDecimalRange? decimalRange,
+    $core.bool? supportsFirImport,
+    $core.bool? matchesFirRates,
+    FirResponse? firResponse,
   }) {
     final result = create();
     if (path != null) result.path = path;
@@ -4615,6 +4777,9 @@ class ConfigField extends $pb.GeneratedMessage {
     if (widget != null) result.widget = widget;
     if (helpDetails != null) result.helpDetails = helpDetails;
     if (decimalRange != null) result.decimalRange = decimalRange;
+    if (supportsFirImport != null) result.supportsFirImport = supportsFirImport;
+    if (matchesFirRates != null) result.matchesFirRates = matchesFirRates;
+    if (firResponse != null) result.firResponse = firResponse;
     return result;
   }
 
@@ -4654,6 +4819,10 @@ class ConfigField extends $pb.GeneratedMessage {
     ..aOS(14, _omitFieldNames ? '' : 'helpDetails')
     ..aOM<ConfigDecimalRange>(15, _omitFieldNames ? '' : 'decimalRange',
         subBuilder: ConfigDecimalRange.create)
+    ..aOB(16, _omitFieldNames ? '' : 'supportsFirImport')
+    ..aOB(17, _omitFieldNames ? '' : 'matchesFirRates')
+    ..aOM<FirResponse>(18, _omitFieldNames ? '' : 'firResponse',
+        subBuilder: FirResponse.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -4807,6 +4976,35 @@ class ConfigField extends $pb.GeneratedMessage {
   void clearDecimalRange() => $_clearField(15);
   @$pb.TagNumber(15)
   ConfigDecimalRange ensureDecimalRange() => $_ensure(14);
+
+  @$pb.TagNumber(16)
+  $core.bool get supportsFirImport => $_getBF(15);
+  @$pb.TagNumber(16)
+  set supportsFirImport($core.bool value) => $_setBool(15, value);
+  @$pb.TagNumber(16)
+  $core.bool hasSupportsFirImport() => $_has(15);
+  @$pb.TagNumber(16)
+  void clearSupportsFirImport() => $_clearField(16);
+
+  @$pb.TagNumber(17)
+  $core.bool get matchesFirRates => $_getBF(16);
+  @$pb.TagNumber(17)
+  set matchesFirRates($core.bool value) => $_setBool(16, value);
+  @$pb.TagNumber(17)
+  $core.bool hasMatchesFirRates() => $_has(16);
+  @$pb.TagNumber(17)
+  void clearMatchesFirRates() => $_clearField(17);
+
+  @$pb.TagNumber(18)
+  FirResponse get firResponse => $_getN(17);
+  @$pb.TagNumber(18)
+  set firResponse(FirResponse value) => $_setField(18, value);
+  @$pb.TagNumber(18)
+  $core.bool hasFirResponse() => $_has(17);
+  @$pb.TagNumber(18)
+  void clearFirResponse() => $_clearField(18);
+  @$pb.TagNumber(18)
+  FirResponse ensureFirResponse() => $_ensure(17);
 }
 
 class ConfigSection extends $pb.GeneratedMessage {

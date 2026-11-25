@@ -183,7 +183,8 @@ message PlaybackEvent {
 
 // The DSP clamped samples to the output's range.
 message Clipping {
-  // Samples clamped since the source began.
+  // Samples clamped with the current room correction settings in this play.
+  // Zero clears a previous clipping report after a settings change.
   uint64 clipped_samples = 1;
 }
 
@@ -545,10 +546,18 @@ message DspProfile {
       PEAK = 1;
       LOW_SHELF = 2;
       HIGH_SHELF = 3;
+      // Second order, 12 dB per octave, shaped by frequency and Q alone.
+      HIGH_PASS = 4;
+      LOW_PASS = 5;
+      // 6 dB per octave, shaped by frequency alone.
+      FIRST_ORDER_HIGH_PASS = 6;
+      FIRST_ORDER_LOW_PASS = 7;
     }
     Type type = 1;
     double frequency_hz = 2;
+    // Zero for a pass band.
     double gain_db = 3;
+    // Zero for a first-order band.
     double q = 4;
   }
   uint32 version = 1;
@@ -556,6 +565,13 @@ message DspProfile {
   repeated Band shared = 3;
   repeated Band left = 4;
   repeated Band right = 5;
+}
+
+// A named convolution preset. Each WAV contains filter coefficients for one
+// distinct sample rate. Mono applies to both speakers, stereo is independent.
+message FirProfile {
+  string name = 1;
+  repeated bytes impulse_wav = 2;
 }
 
 message ConfigRequest {}
@@ -568,6 +584,7 @@ message ConfigUpdate {
   repeated Setting settings = 1;
   // Where to fetch the SHA-256 selected by dsp.profile on a cache miss.
   string dsp_profile_url = 2;
+  string fir_profile_url = 3;
 }
 
 // Core -> renderer: install a published renderer release and restart into it.
@@ -648,6 +665,15 @@ message ConfigOption {
   string description = 3;
 }
 
+// Magnitude preview of the selected impulse at sample_rate, independent of PEQ.
+message FirResponse {
+  uint32 sample_rate = 1;
+  uint32 source_rate = 2; // Supplied WAV used to build this variant.
+  // Uniform in log frequency, from 20 Hz to min(20 kHz, Nyquist), inclusive.
+  repeated float left_db = 3;
+  repeated float right_db = 4; // Empty when both channels share a curve.
+}
+
 message ConfigField {
   string path = 1;  // dotted and renderer-local, e.g. "output.alsa.device"
   string title = 2;
@@ -664,6 +690,9 @@ message ConfigField {
   ConfigWidget widget = 13;
   string help_details = 14;
   ConfigDecimalRange decimal_range = 15;
+  bool supports_fir_import = 16;
+  bool matches_fir_rates = 17;
+  FirResponse fir_response = 18;
 }
 
 message ConfigSection {

@@ -1,11 +1,36 @@
 import 'dart:convert';
 
 import 'data_model.dart'
-    show FilterKind, FilterSpec, Genre, SearchType, SearchTypeExtension;
+    show
+        FilterKind,
+        FilterOp,
+        FilterSpec,
+        FilterValue,
+        SearchType,
+        SearchTypeExtension;
 
 /// The field id every source uses for the entity kind — the one values
 /// field a consumer may recognise by name rather than by vocabulary.
 const kTypeFieldId = 'type';
+
+/// The field id sources give genre. Search results narrow by their own genres
+/// under it, and filters saved while genre was the only values facet load
+/// their genres into it.
+const kGenreFieldId = 'genre';
+
+/// The genre facet of search results, over the genres of what they hold: an
+/// item matches when it has any one of those chosen.
+const kResultsGenreField = FilterSpec(
+  id: kGenreFieldId,
+  kind: FilterKind.choice,
+  label: 'Genre',
+  ops: [FilterOp.any],
+);
+
+/// Which vocabulary fills a values facet: one catalog's one field. Scoped to
+/// the catalog rather than the source because a field is declared per shelf —
+/// Jamendo offers genre on its track shelf alone.
+typedef FilterVocabulary = ({String catalogId, String field});
 
 /// How far one filter facet is supported by the data source behind a surface.
 enum FacetSupport {
@@ -43,6 +68,40 @@ extension SourceOptions on List<SourceOption> {
   }
 }
 
+/// A field narrowed to some of its values — genre, decade, or any other its
+/// source declares — as one surface offers it.
+class ChoiceFacet {
+  /// The field as declared: the id a filter addresses it by, the label its
+  /// group goes under, and the combination its source honours.
+  final FilterSpec field;
+
+  final FacetSupport support;
+
+  /// Where its values are fetched from. Null where [options] holds them.
+  final FilterVocabulary? vocabulary;
+
+  /// The values held in hand, in the order to offer them — a surface that
+  /// already knows what it holds, like loaded search results, fills the
+  /// facet without a fetch.
+  final List<FilterValue>? options;
+
+  const ChoiceFacet({
+    required this.field,
+    this.support = FacetSupport.supported,
+    this.vocabulary,
+    this.options,
+  });
+
+  String get id => field.id;
+
+  ChoiceFacet withSupport(FacetSupport support) => ChoiceFacet(
+    field: field,
+    support: support,
+    vocabulary: vocabulary,
+    options: options,
+  );
+}
+
 /// What a browsable surface can be filtered by. Facets the backend can honour
 /// are [FacetSupport.supported]; the rest render as placeholders or not at all.
 ///
@@ -64,20 +123,8 @@ class BrowseFilterCapabilities {
   /// dimmed; when [type] is [FacetSupport.unsupported] these read as selected.
   final Set<SearchType> presentTypes;
 
-  final FacetSupport genre;
-
-  /// The catalog whose vocabulary fills the genre facet, and the field id it
-  /// is filled from. Null where there is no genre facet to fill, or where
-  /// [genreOptions] already holds it.
-  final ({String catalogId, String field})? genreVocabulary;
-
-  /// The genre vocabulary held in hand — a surface that already knows what
-  /// it holds, like loaded search results, fills the facet without a fetch.
-  final List<Genre>? genreOptions;
-
-  /// The genre field as its source declared it — the id the request addresses
-  /// it by, and the combination the source honours.
-  final FilterSpec? genreField;
+  /// The values fields on offer, in the order their source declared them.
+  final List<ChoiceFacet> choices;
 
   /// The free-text field as its source declared it; its label says what that
   /// source matches, which differs between sources.
@@ -104,10 +151,7 @@ class BrowseFilterCapabilities {
     this.type = FacetSupport.hidden,
     this.types = const [],
     this.presentTypes = const {},
-    this.genre = FacetSupport.hidden,
-    this.genreVocabulary,
-    this.genreOptions,
-    this.genreField,
+    this.choices = const [],
     this.textField,
     this.typeField,
     this.kind = FacetSupport.hidden,
@@ -133,12 +177,10 @@ class BrowseFilterCapabilities {
 
     final textField = find((s) => s.kind == FilterKind.text);
     // `type` is the one values field every source spells the same way, so it
-    // is matched by id; any other is the vocabulary the genre facet fills from.
+    // is matched by id; every other is a facet of its own, filled from its
+    // own vocabulary.
     final typeField = find(
       (s) => s.kind == FilterKind.choice && s.id == kTypeFieldId,
-    );
-    final genreField = find(
-      (s) => s.kind == FilterKind.choice && s.id != kTypeFieldId,
     );
     return BrowseFilterCapabilities(
       text: textField == null ? FacetSupport.hidden : FacetSupport.supported,
@@ -147,20 +189,35 @@ class BrowseFilterCapabilities {
           : FacetSupport.supported,
       types: typeField == null ? const [] : types,
       presentTypes: typeField == null ? const {} : types.toSet(),
-      genre: genreField == null ? FacetSupport.hidden : FacetSupport.supported,
-      genreVocabulary: genreField == null
-          ? null
-          : (catalogId: catalogId, field: genreField.id),
-      genreField: genreField,
+      choices: [
+        for (final spec in specs)
+          if (spec.kind == FilterKind.choice && spec.id != kTypeFieldId)
+            ChoiceFacet(
+              field: spec,
+              vocabulary: (catalogId: catalogId, field: spec.id),
+            ),
+      ],
       textField: textField,
       typeField: typeField,
     );
   }
 
+  /// The facet over [field], where this surface offers one.
+  ChoiceFacet? choice(String field) {
+    for (final facet in choices) {
+      if (facet.id == field) return facet;
+    }
+    return null;
+  }
+
+  /// Whether any values facet renders.
+  bool get hasChoices =>
+      choices.any((facet) => facet.support != FacetSupport.hidden);
+
   /// True when nothing at all would render — callers skip the bar entirely.
   bool get isEmpty =>
       text == FacetSupport.hidden &&
-      genre == FacetSupport.hidden &&
+      !hasChoices &&
       (type == FacetSupport.hidden || types.isEmpty) &&
       kind == FacetSupport.hidden &&
       (source == FacetSupport.hidden || sources.isEmpty) &&
@@ -175,7 +232,8 @@ class BrowseFilterCapabilities {
   ];
 }
 
-enum BrowseFacet { text, type, genre, kind, source, order }
+/// One facet of a query. [choice] stands for every values field at once.
+enum BrowseFacet { text, type, choice, kind, source, order }
 
 /// The active filter selection — one request object rather than a widening
 /// list of arguments, so the surfaces above it never learn how it travels.
@@ -187,7 +245,9 @@ class BrowseFilterQuery {
   /// Null means "all kinds".
   final SearchType? type;
 
-  final List<String> genreIds;
+  /// The values chosen in each values field, by field id. A field missing or
+  /// empty is unconstrained.
+  final Map<String, List<String>> selections;
 
   /// Null means both blocks.
   final ResultKind? kind;
@@ -197,30 +257,50 @@ class BrowseFilterQuery {
 
   final NameMatchOrder order;
 
+  /// Values an app from before several values fields saved for its one
+  /// values facet, which stood for whichever field the shelf declared first:
+  /// [fittedTo] files them under that field.
+  final List<String> legacyChoice;
+
   const BrowseFilterQuery({
     this.text = '',
     this.type,
-    this.genreIds = const [],
+    this.selections = const {},
     this.kind,
     this.sources = const [],
     this.order = NameMatchOrder.relevance,
+    this.legacyChoice = const [],
   });
+
+  /// The values chosen in [field].
+  List<String> selected(String field) => selections[field] ?? const [];
+
+  List<String> get genreIds => selected(kGenreFieldId);
+
+  /// This query with [ids] chosen in [field] instead.
+  BrowseFilterQuery withSelected(String field, List<String> ids) => copyWith(
+    selections: {
+      for (final MapEntry(:key, :value) in selections.entries)
+        if (key != field) key: value,
+      if (ids.isNotEmpty) field: ids,
+    },
+  );
 
   bool get isEmpty =>
       text.isEmpty &&
       type == null &&
-      genreIds.isEmpty &&
+      selections.values.every((ids) => ids.isEmpty) &&
       kind == null &&
       sources.isEmpty &&
       order == NameMatchOrder.relevance;
 
   /// How many separate answers this query carries — the number on the filter
-  /// button's badge, and the number of chips shown above the rows. Each genre
+  /// button's badge, and the number of chips shown above the rows. Each value
   /// and each source counts on its own, because each is separately removable.
   int get activeCount =>
       (text.isEmpty ? 0 : 1) +
       (type == null ? 0 : 1) +
-      genreIds.length +
+      selections.values.fold<int>(0, (count, ids) => count + ids.length) +
       (kind == null ? 0 : 1) +
       sources.length +
       (order == NameMatchOrder.relevance ? 0 : 1);
@@ -231,7 +311,12 @@ class BrowseFilterQuery {
   bool isHonouredBy(BrowseFilterCapabilities capabilities) =>
       (text.isEmpty || capabilities.text == FacetSupport.supported) &&
       (type == null || capabilities.type == FacetSupport.supported) &&
-      (genreIds.isEmpty || capabilities.genre == FacetSupport.supported) &&
+      selections.entries.every(
+        (selection) =>
+            selection.value.isEmpty ||
+            capabilities.choice(selection.key)?.support ==
+                FacetSupport.supported,
+      ) &&
       (kind == null || capabilities.kind == FacetSupport.supported) &&
       (sources.isEmpty || capabilities.source == FacetSupport.supported) &&
       (order == NameMatchOrder.relevance ||
@@ -247,21 +332,34 @@ class BrowseFilterQuery {
   BrowseFilterQuery fittedTo(BrowseFilterCapabilities capabilities) {
     bool live(FacetSupport support) => support == FacetSupport.supported;
     final offeredSources = {for (final s in capabilities.sources) s.name};
-    final offeredGenres = capabilities.genreOptions == null
-        ? null
-        : {for (final g in capabilities.genreOptions!) g.id};
+    final legacyField = capabilities.choices.firstOrNull?.id;
+    final filed = legacyChoice.isEmpty || legacyField == null
+        ? this
+        : withSelected(legacyField, [
+            ...selected(legacyField),
+            for (final id in legacyChoice)
+              if (!selected(legacyField).contains(id)) id,
+          ]);
+    // Values fetched on demand are not known here, so they are kept.
+    List<String> offered(ChoiceFacet facet) {
+      final options = facet.options == null
+          ? null
+          : {for (final value in facet.options!) value.id};
+      return [
+        for (final id in filed.selected(facet.id))
+          if (options == null || options.contains(id)) id,
+      ];
+    }
+
     return BrowseFilterQuery(
       text: live(capabilities.text) ? text : '',
       type: live(capabilities.type) && capabilities.types.contains(type)
           ? type
           : null,
-      // Genres fetched on demand are not known here, so they are kept.
-      genreIds: !live(capabilities.genre)
-          ? const []
-          : [
-              for (final id in genreIds)
-                if (offeredGenres == null || offeredGenres.contains(id)) id,
-            ],
+      selections: {
+        for (final facet in capabilities.choices)
+          if (live(facet.support)) facet.id: offered(facet),
+      }..removeWhere((_, ids) => ids.isEmpty),
       kind: live(capabilities.kind) ? kind : null,
       sources: live(capabilities.source)
           ? [
@@ -279,10 +377,14 @@ class BrowseFilterQuery {
       return picked.length == b.toSet().length && picked.containsAll(b);
     }
 
+    final fields = {...selections.keys, ...other.selections.keys};
     return {
       if (text != other.text) BrowseFacet.text,
       if (type != other.type) BrowseFacet.type,
-      if (!same(genreIds, other.genreIds)) BrowseFacet.genre,
+      if (!fields.every(
+        (field) => same(selected(field), other.selected(field)),
+      ))
+        BrowseFacet.choice,
       if (kind != other.kind) BrowseFacet.kind,
       if (!same(sources, other.sources)) BrowseFacet.source,
       if (order != other.order) BrowseFacet.order,
@@ -295,20 +397,31 @@ class BrowseFilterQuery {
   ) => BrowseFilterQuery(
     text: facets.contains(BrowseFacet.text) ? other.text : text,
     type: facets.contains(BrowseFacet.type) ? other.type : type,
-    genreIds: facets.contains(BrowseFacet.genre) ? other.genreIds : genreIds,
+    selections: facets.contains(BrowseFacet.choice)
+        ? other.selections
+        : selections,
     kind: facets.contains(BrowseFacet.kind) ? other.kind : kind,
     sources: facets.contains(BrowseFacet.source) ? other.sources : sources,
     order: facets.contains(BrowseFacet.order) ? other.order : order,
   );
 
-  Map<String, Object> toJson() => {
-    if (text.isNotEmpty) 'text': text,
-    if (type case final type?) 'type': type.name,
-    if (genreIds.isNotEmpty) 'genreIds': genreIds,
-    if (kind case final kind?) 'kind': kind.name,
-    if (sources.isNotEmpty) 'sources': sources,
-    if (order != NameMatchOrder.relevance) 'order': order.name,
-  };
+  Map<String, Object> toJson() {
+    final values = {
+      for (final field in selections.keys.toList()..sort())
+        if (selected(field).isNotEmpty) field: selected(field),
+    };
+    return {
+      if (text.isNotEmpty) 'text': text,
+      if (type case final type?) 'type': type.name,
+      // Genre also under the key older apps read, so they still load it.
+      if (genreIds.isNotEmpty || legacyChoice.isNotEmpty)
+        'genreIds': genreIds.isNotEmpty ? genreIds : legacyChoice,
+      if (values.isNotEmpty) 'values': values,
+      if (kind case final kind?) 'kind': kind.name,
+      if (sources.isNotEmpty) 'sources': sources,
+      if (order != NameMatchOrder.relevance) 'order': order.name,
+    };
+  }
 
   /// Ignores unknown values from older saved filters.
   factory BrowseFilterQuery.fromJson(Map<String, dynamic> json) {
@@ -320,10 +433,17 @@ class BrowseFilterQuery {
         : const [];
     final type = SearchType.values.asNameMap()[json['type']];
     final text = json['text'];
+    final values = json['values'];
+    final savedWithGenre = values is Map && values.containsKey(kGenreFieldId);
     return BrowseFilterQuery(
       text: text is String ? text : '',
       type: type == SearchType.invalid ? null : type,
-      genreIds: strings(json['genreIds']),
+      selections: {
+        if (values is Map)
+          for (final MapEntry(:key, :value) in values.entries)
+            if (key is String && strings(value).isNotEmpty) key: strings(value),
+      },
+      legacyChoice: savedWithGenre ? const [] : strings(json['genreIds']),
       kind: ResultKind.values.asNameMap()[json['kind']],
       sources: strings(json['sources']),
       order:
@@ -336,7 +456,7 @@ class BrowseFilterQuery {
     String? text,
     SearchType? type,
     bool clearType = false,
-    List<String>? genreIds,
+    Map<String, List<String>>? selections,
     ResultKind? kind,
     bool clearKind = false,
     List<String>? sources,
@@ -345,10 +465,11 @@ class BrowseFilterQuery {
     return BrowseFilterQuery(
       text: text ?? this.text,
       type: clearType ? null : (type ?? this.type),
-      genreIds: genreIds ?? this.genreIds,
+      selections: selections ?? this.selections,
       kind: clearKind ? null : (kind ?? this.kind),
       sources: sources ?? this.sources,
       order: order ?? this.order,
+      legacyChoice: legacyChoice,
     );
   }
 
@@ -388,11 +509,11 @@ class BrowseFilterQuery {
       };
     }
 
-    final genreField = capabilities.genreField;
-    if (genreField != null &&
-        capabilities.genre == FacetSupport.supported &&
-        genreIds.isNotEmpty) {
-      fields[genreField.id] = {genreField.defaultOp.name: genreIds};
+    for (final facet in capabilities.choices) {
+      final ids = selected(facet.id);
+      if (facet.support == FacetSupport.supported && ids.isNotEmpty) {
+        fields[facet.id] = {facet.field.defaultOp.name: ids};
+      }
     }
 
     return fields.isEmpty ? null : jsonEncode(fields);

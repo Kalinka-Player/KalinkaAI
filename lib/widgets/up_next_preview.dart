@@ -15,6 +15,7 @@ import '../utils/playback_utils.dart';
 import '../utils/web_build_target.dart';
 import 'away.dart';
 import 'column_separator.dart';
+import 'keep_playing.dart';
 import 'procedural_album_art.dart';
 import 'queue_columns.dart';
 import 'tap_highlight.dart';
@@ -66,6 +67,7 @@ class SliverUpNextPreview extends ConsumerWidget {
     }
     // At the end of the queue it says so, as the queue's own Up Next does.
     final total = math.max(0, queue.tracks.length - start);
+    final offer = total == 0 && ref.watch(keepPlayingOfferShownProvider);
     // The same notion of away as the rest of the player.
     final away = ref.watch(
       connectionStateProvider.select((s) => s.isInterrupted),
@@ -109,15 +111,18 @@ class SliverUpNextPreview extends ConsumerWidget {
           hasAlbums: hasAlbums,
         );
         final legend = total > 0 && columns.showAlbum;
-        final capacity = fitToSpace
-            ? ((remaining -
-                          headerHeight -
-                          (legend ? columns.legendHeight : 0) -
-                          16) /
-                      rowHeight)
-                  .floor()
-            : 5;
-        if (capacity < 1 || constraints.crossAxisExtent < headingWidth) {
+        final room =
+            remaining - headerHeight - (legend ? columns.legendHeight : 0) - 16;
+        final capacity = fitToSpace ? (room / rowHeight).floor() : 5;
+        final fits = offer
+            ? !fitToSpace ||
+                  room >=
+                      EmptyUpNext.offerHeight(
+                        context,
+                        constraints.crossAxisExtent,
+                      )
+            : capacity >= 1;
+        if (!fits || constraints.crossAxisExtent < headingWidth) {
           return const SliverToBoxAdapter(child: SizedBox.shrink());
         }
         final count = math.min(5, math.min(total, capacity));
@@ -142,17 +147,7 @@ class SliverUpNextPreview extends ConsumerWidget {
                       start: _horizontalInset + _artworkSize + _artworkGap,
                       handle: false,
                     ),
-                  if (total == 0)
-                    SizedBox(
-                      height: rowHeight,
-                      child: Center(
-                        child: Text(
-                          'Queue is empty',
-                          style: KalinkaTextStyles.queueItemArtist,
-                          textAlign: TextAlign.center,
-                        ),
-                      ),
-                    ),
+                  if (total == 0) EmptyUpNext(emptyHeight: rowHeight),
                   for (var i = 0; i < count; i++)
                     SizedBox(
                       height: rowHeight,

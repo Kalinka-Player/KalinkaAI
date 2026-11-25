@@ -554,8 +554,7 @@ class SearchSessionState {
       type: held.type,
       types: held.types,
       presentTypes: held.presentTypes,
-      genre: held.genre,
-      genreOptions: held.genreOptions,
+      choices: held.choices,
       source: held.source,
       sources: held.sources,
     );
@@ -606,10 +605,20 @@ class SearchSessionState {
           ? FacetSupport.supported
           : FacetSupport.hidden,
       sources: results.sources,
-      genre: genres != null && genres.isEmpty
-          ? FacetSupport.hidden
-          : FacetSupport.supported,
-      genreOptions: genres,
+      choices: [
+        ChoiceFacet(
+          field: kResultsGenreField,
+          support: genres != null && genres.isEmpty
+              ? FacetSupport.hidden
+              : FacetSupport.supported,
+          options: genres == null
+              ? null
+              : [
+                  for (final genre in genres)
+                    FilterValue(id: genre.id, name: genre.name),
+                ],
+        ),
+      ],
       order: FacetSupport.supported,
     );
   }
@@ -1780,7 +1789,7 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
     if (holding != null && !results.settled) {
       fitted = fitted.withFacetsFrom(holding, const {
         BrowseFacet.type,
-        BrowseFacet.genre,
+        BrowseFacet.choice,
       });
     }
     return fitted;

@@ -140,7 +140,49 @@ class RendererConfigOption {
       );
 }
 
+/// Log-spaced samples from 20 Hz through the lower of Nyquist and 20 kHz.
+class FirResponseCurve {
+  const FirResponseCurve(
+    this.sampleRate,
+    this.sourceRate,
+    this.leftDb,
+    this.rightDb,
+  );
+  final int sampleRate, sourceRate;
+  final List<double> leftDb, rightDb;
+
+  static FirResponseCurve? fromJson(dynamic value) {
+    if (value is! Map) return null;
+    final rate = value['sample_rate'], source = value['source_rate'];
+    final left = value['left_db'], right = value['right_db'] ?? const [];
+    if (rate is! int ||
+        rate <= 40 ||
+        source is! int ||
+        source <= 0 ||
+        left is! List ||
+        left.length < 2 ||
+        right is! List ||
+        (right.isNotEmpty && right.length != left.length)) {
+      return null;
+    }
+    List<double>? samples(List points) {
+      final result = <double>[];
+      for (final point in points) {
+        if (point is! num || !point.isFinite) return null;
+        result.add(point.toDouble());
+      }
+      return result;
+    }
+
+    final l = samples(left), r = samples(right);
+    return l == null || r == null ? null : FirResponseCurve(rate, source, l, r);
+  }
+}
+
 class RendererConfigField {
+  static const namePath = 'renderer.name';
+  static const rewFirProfile = 'output.rew_fir_profile';
+
   /// Dotted and renderer-local, e.g. `output.alsa.device`.
   final String path;
   final String title;
@@ -154,6 +196,8 @@ class RendererConfigField {
   final List<RendererConfigOption> options;
   final RendererApplyCost apply;
   final bool readOnly;
+  final bool supportsFirImport, matchesFirRates;
+  final FirResponseCurve? firResponse;
   final RendererFieldImportance importance;
 
   /// Set for numeric fields the renderer bounded; null when it named no limits.
@@ -174,6 +218,9 @@ class RendererConfigField {
     this.options = const [],
     this.apply = RendererApplyCost.unknown,
     this.readOnly = false,
+    this.supportsFirImport = false,
+    this.matchesFirRates = false,
+    this.firResponse,
     this.importance = RendererFieldImportance.simple,
     this.range,
     this.unit = '',
@@ -195,6 +242,9 @@ class RendererConfigField {
         ],
         apply: RendererApplyCost.fromName(j['apply'] as String?),
         readOnly: (j['read_only'] ?? false) as bool,
+        supportsFirImport: j['supports_fir_import'] == true,
+        matchesFirRates: j['matches_fir_rates'] == true,
+        firResponse: FirResponseCurve.fromJson(j['fir_response']),
         importance: RendererFieldImportance.fromName(
           j['importance'] as String?,
         ),

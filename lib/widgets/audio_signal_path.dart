@@ -4,7 +4,12 @@ import '../data_model/data_model.dart';
 import '../theme/app_theme.dart';
 import '../utils/playback_utils.dart';
 
-typedef SignalStage = ({String label, String detail, IconData icon});
+typedef SignalStage = ({
+  String kind,
+  String label,
+  String detail,
+  IconData icon,
+});
 
 String _rate(int hz, int unit) {
   final precision = unit == 1000000 ? 6 : 3;
@@ -39,6 +44,7 @@ String _pcm(int hz, int bits, int channels) => _details([
 /// rate change between the decoded stream and the output happened past the
 /// renderer's DSP, in ALSA or a sound server.
 const _rateKeepingSteps = {
+  'fir',
   'peq',
   'preamp',
   'dsd_gain',
@@ -100,20 +106,47 @@ List<SignalStage> signalStages(
   final origin = _details([?source, codec]);
   return [
     if (origin.isNotEmpty)
-      (label: 'Source', detail: origin, icon: Icons.library_music_outlined),
+      (
+        kind: 'source',
+        label: 'Source',
+        detail: origin,
+        icon: Icons.library_music_outlined,
+      ),
     if (decoded.isNotEmpty)
-      (label: 'Decoded stream', detail: decoded, icon: Icons.graphic_eq),
+      (
+        kind: 'decoded',
+        label: 'Decoded stream',
+        detail: decoded,
+        icon: Icons.graphic_eq,
+      ),
     if (steps != null)
       for (final step in steps)
         (
-          label: step.name.isNotEmpty ? step.name : step.kind,
+          kind: step.kind,
+          label: switch ((step.kind, step.name)) {
+            ('preamp', 'Preamp' || '') => 'Headroom',
+            (_, '') => step.kind,
+            _ => step.name,
+          },
           detail: step.summary,
-          icon: Icons.tune,
+          icon: switch (step.kind) {
+            'fir' => Icons.waves_rounded,
+            'peq' => Icons.equalizer_rounded,
+            'preamp' => Icons.volume_up_outlined,
+            'dither' => Icons.grain_rounded,
+            _ => Icons.tune,
+          },
         ),
     if (native)
-      (label: 'Native DSD', detail: outputFormat, icon: Icons.swap_horiz),
+      (
+        kind: 'dsd_native',
+        label: 'Native DSD',
+        detail: outputFormat,
+        icon: Icons.swap_horiz,
+      ),
     if (out != null && dop)
       (
+        kind: 'dop',
         label: 'DSD over PCM',
         detail: _details([
           if (out.sampleRate > 0) '${_rate(out.sampleRate, 1000)} kHz carrier',
@@ -123,6 +156,7 @@ List<SignalStage> signalStages(
       ),
     if (steps == null && out != null && dsd && pcmOutput)
       (
+        kind: 'dsd_to_pcm',
         label: 'DSD to PCM',
         detail: _pcm(out.sampleRate, out.bitsPerSample, out.channels),
         icon: Icons.tune,
@@ -136,6 +170,7 @@ List<SignalStage> signalStages(
         out.sampleRate > 0 &&
         audio.sampleRate != out.sampleRate)
       (
+        kind: 'sample_rate_change',
         label: 'Sample rate change',
         detail:
             '${_rate(audio.sampleRate, 1000)} → ${_rate(out.sampleRate, 1000)} kHz',
@@ -146,12 +181,14 @@ List<SignalStage> signalStages(
         volume.maxVolume > 0 &&
         volume.currentVolume < volume.maxVolume)
       (
+        kind: 'software_volume',
         label: 'Software volume',
         detail: '${volume.currentVolume} / ${volume.maxVolume}',
         icon: Icons.volume_down_outlined,
       ),
     if (out != null)
       (
+        kind: 'output',
         label: 'Output',
         detail: destination.isEmpty ? 'Format unavailable' : destination,
         icon: Icons.speaker_outlined,

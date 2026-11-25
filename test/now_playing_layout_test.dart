@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
 
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/rendering.dart';
@@ -12,11 +14,15 @@ import 'package:kalinka/data_model/playqueue_events.dart';
 import 'package:kalinka/data_model/kalinka_ws_api.dart';
 import 'package:kalinka/providers/app_state_provider.dart';
 import 'package:kalinka/providers/connection_state_provider.dart';
+import 'package:kalinka/providers/kalinka_player_api_provider.dart';
 import 'package:kalinka/providers/kalinka_ws_api_provider.dart';
+import 'package:kalinka/providers/queue_features_provider.dart';
 import 'package:kalinka/providers/renderer_provider.dart';
 import 'package:kalinka/providers/renderer_host_provider.dart';
 import 'package:kalinka/renderer/renderer_identity.dart';
 import 'package:kalinka/providers/shell_nav_provider.dart';
+import 'package:kalinka/providers/server_refusal.dart';
+import 'package:kalinka/providers/toast_provider.dart';
 import 'package:kalinka/theme/app_theme.dart';
 import 'package:kalinka/widgets/now_playing_content.dart';
 import 'package:kalinka/widgets/player_header.dart';
@@ -58,6 +64,95 @@ class _Renderers extends RendererListNotifier {
   Future<void> refresh() async {}
 }
 
+/// Turns the playing track down as a server would: [playing] false is its
+/// 409, nothing playing.
+class _DislikeApi extends HomeApi {
+  _DislikeApi({this.playing = true});
+
+  final bool playing;
+  int disliked = 0;
+
+  @override
+  Future<bool> dislikeCurrent() async {
+    disliked++;
+    return playing;
+  }
+}
+
+/// Keeps favourites as a server would: [favorites] are the source's marked
+/// tracks, which cannot be read where [unknown]. An add or a remove fails
+/// with [failure] where it is set, and waits for [held] where that is.
+class _FavoritesApi extends _DislikeApi {
+  _FavoritesApi({
+    this.favorites = const {},
+    this.failure,
+    this.held,
+    this.unknown = false,
+  });
+
+  final Set<String> favorites;
+  final Exception? failure;
+  final bool unknown;
+  final Completer<void>? held;
+  final List<String?> asked = [];
+  final List<String> added = [];
+  final List<String> removed = [];
+
+  @override
+  Future<FavoriteIds> getFavoriteIds({String? source}) async {
+    asked.add(source);
+    if (unknown) throw Exception('favourites unavailable');
+    return FavoriteIds(
+      albums: [],
+      tracks: [...favorites],
+      artists: [],
+      playlists: [],
+    );
+  }
+
+  @override
+  Future<StatusMessage> addFavorite(String id) async {
+    added.add(id);
+    return _answer();
+  }
+
+  @override
+  Future<StatusMessage> removeFavorite(String id) async {
+    removed.add(id);
+    return _answer();
+  }
+
+  Future<StatusMessage> _answer() async {
+    await held?.future;
+    if (failure != null) throw failure!;
+    return StatusMessage(message: 'Ok');
+  }
+}
+
+const _dislikes = QueueFeatures(similar: true, dislike: true);
+final _dislike = find.byTooltip('Not like this');
+final _heart = find.byTooltip('Add to favourites');
+final _hearted = find.byTooltip('Remove from favourites');
+
+/// Which of the thumb-down and the heart a layout is checked with.
+const _titleActionCases = [
+  (false, false),
+  (true, false),
+  (false, true),
+  (true, true),
+];
+
+/// The source the queue's tracks come from where they need one.
+const _qobuz = 'qobuz';
+
+ModuleInfo _source({bool favorites = true}) => ModuleInfo(
+  name: _qobuz,
+  title: 'Qobuz',
+  enabled: true,
+  state: ModuleState.ready,
+  capabilities: [if (favorites) ModuleCapability.favorites],
+);
+
 final _preview = find.byKey(const ValueKey('now-playing-up-next'));
 final _art = find.byKey(const ValueKey('now-playing-artwork'));
 final _presentation = find.byKey(const ValueKey('now-playing-presentation'));
@@ -75,11 +170,12 @@ PlayQueueState _queue({
   bool exclusive = false,
   int seq = 1,
   bool longNames = false,
+  String? source,
 }) => PlayQueueState(
   trackList: [
     for (var i = 0; i < count; i++)
       Track(
-        id: 'track-$i',
+        id: source == null ? 'track-$i' : 'kalinka:$source:track:$i',
         title: longNames
             ? 'Evening track $i — a live recording from the northern coast'
             : 'Evening track $i',
@@ -105,6 +201,65 @@ PlayQueueState _queue({
   seq: seq,
 );
 
+/// The thumb-down and the heart beside [title] where [dislike] and [favorite]
+/// say they show, each a whole 48dp target inside the window, its top at the
+/// title's top, at the details' edges however long the title is. Flush left
+/// they follow the title at the right edge, thumb-down first; else the
+/// thumb-down holds the left edge and the heart the right, and the title
+/// keeps the centre of the details whichever shows. A short window scales the
+/// presentation they sit in down, so their size is measured in its own terms.
+void _expectTitleActions(
+  WidgetTester tester,
+  String title, {
+  required bool dislike,
+  required bool favorite,
+  required bool leftAligned,
+}) {
+  final text = tester.getRect(find.text(title));
+  final shown = <Rect>[];
+  for (final (button, on) in [(_dislike, dislike), (_heart, favorite)]) {
+    if (!on) {
+      expect(button, findsNothing);
+      continue;
+    }
+    expect(button.hitTestable(), findsOneWidget);
+    expect(tester.getSize(button), const Size.square(48));
+    final bounds = tester.getRect(button);
+    expect(bounds.top, closeTo(text.top, 0.5));
+    expect(bounds.left, greaterThanOrEqualTo(0));
+    expect(
+      bounds.right,
+      lessThanOrEqualTo(tester.view.physicalSize.width - 16),
+    );
+    shown.add(bounds);
+  }
+  final details = tester.getRect(_metadata);
+  if (shown.isNotEmpty) {
+    final box = tester.renderObject<RenderBox>(_metadata);
+    expect(box.size.width, closeTo(box.constraints.maxWidth, 0.5));
+  }
+  if (leftAligned) {
+    var after = text.right;
+    for (final bounds in shown) {
+      expect(bounds.left, greaterThanOrEqualTo(after));
+      after = bounds.right;
+    }
+    if (shown.isNotEmpty) expect(after, closeTo(details.right, 0.5));
+    return;
+  }
+  if (dislike) {
+    final bounds = tester.getRect(_dislike);
+    expect(bounds.right, lessThanOrEqualTo(text.left));
+    expect(bounds.left, closeTo(details.left, 0.5));
+  }
+  if (favorite) {
+    final bounds = tester.getRect(_heart);
+    expect(bounds.left, greaterThanOrEqualTo(text.right));
+    expect(bounds.right, closeTo(details.right, 0.5));
+  }
+  expect(text.center.dx, closeTo(details.center.dx, 0.5));
+}
+
 Future<ProviderContainer> _pump(
   WidgetTester tester, {
   required SettableQueue queue,
@@ -114,12 +269,19 @@ Future<ProviderContainer> _pump(
   bool overlay = false,
   Key? outputKey,
   String outputName = 'Living room',
+  QueueFeatures? features,
+  KalinkaPlayerProxy? api,
+  List<ModuleInfo> sources = const [],
 }) async {
   final container = await pumpHomeShell(
     tester,
     queue: queue,
     size: size,
+    api: api,
+    sources: sources,
     overrides: [
+      if (features != null)
+        queueFeaturesProvider.overrideWith((ref) async => features),
       kalinkaWsApiProvider.overrideWith((ref) => _Api(ref)),
       rendererListProvider.overrideWith(() => _Renderers(outputName)),
       rendererIdentityProvider.overrideWith(
@@ -165,6 +327,294 @@ Future<ProviderContainer> _pump(
 
 void main() {
   final captures = Platform.environment['KALINKA_REVIEW_DIR'];
+  group('thumbs-down', () {
+    testWidgets('a server without a dislike offers none', (tester) async {
+      await _pump(
+        tester,
+        queue: SettableQueue(_queue()),
+        features: QueueFeatures.none,
+      );
+      expect(find.text('Evening track 0'), findsOneWidget);
+      expect(_dislike, findsNothing);
+    });
+
+    for (final (name, queue) in [
+      ('an empty queue', PlayQueueState.empty),
+      ('a plugin playing', _queue(exclusive: true)),
+    ]) {
+      testWidgets('$name has nothing of the queue\'s to turn down', (
+        tester,
+      ) async {
+        await _pump(tester, queue: SettableQueue(queue), features: _dislikes);
+        expect(_dislike, findsNothing);
+      });
+    }
+
+    testWidgets('turning a track down skips it and says so', (tester) async {
+      final api = _DislikeApi();
+      final container = await _pump(
+        tester,
+        queue: SettableQueue(_queue()),
+        features: _dislikes,
+        api: api,
+      );
+      expect(
+        tester.getSemantics(_dislike),
+        matchesSemantics(
+          label: 'Not like this',
+          isButton: true,
+          hasEnabledState: true,
+          isEnabled: true,
+          hasTapAction: true,
+          isFocusable: true,
+          hasFocusAction: true,
+        ),
+      );
+
+      await tester.tap(_dislike);
+      await tester.pump();
+
+      expect(api.disliked, 1);
+      final toast = container.read(toastProvider).single;
+      expect(toast.message, 'Skipped — this queue will avoid tracks like it');
+      expect(toast.isError, isFalse);
+      expect(toast.inPanel, isTrue);
+      expect((container.read(kalinkaWsApiProvider) as _Api).sent, isEmpty);
+      await tester.pump(const Duration(seconds: 30));
+    });
+
+    testWidgets('with nothing playing on the server it says nothing', (
+      tester,
+    ) async {
+      final api = _DislikeApi(playing: false);
+      final container = await _pump(
+        tester,
+        queue: SettableQueue(_queue()),
+        features: _dislikes,
+        api: api,
+      );
+
+      await tester.tap(_dislike);
+      await tester.pump();
+
+      expect(api.disliked, 1);
+      expect(container.read(toastProvider), isEmpty);
+    });
+
+    testWidgets('a server away takes no dislike', (tester) async {
+      final api = _DislikeApi();
+      final container = await _pump(
+        tester,
+        queue: SettableQueue(_queue()),
+        features: _dislikes,
+        api: api,
+      );
+      (container.read(connectionStateProvider.notifier) as SettableConnection)
+          .set(ConnectionStatus.offline);
+      await tester.pump();
+
+      await tester.tap(_dislike, warnIfMissed: false);
+      await tester.pump();
+
+      expect(api.disliked, 0);
+    });
+  });
+
+  group('favourite heart', () {
+    const playing = 'kalinka:$_qobuz:track:0';
+
+    Future<ProviderContainer> pumpHeart(
+      WidgetTester tester,
+      _FavoritesApi api, {
+      PlayQueueState? queue,
+      List<ModuleInfo>? sources,
+    }) => _pump(
+      tester,
+      queue: SettableQueue(queue ?? _queue(source: _qobuz)),
+      features: QueueFeatures.none,
+      api: api,
+      sources: sources ?? [_source()],
+    );
+
+    Icon heartIcon(WidgetTester tester, Finder heart) => tester.widget<Icon>(
+      find.descendant(of: heart, matching: find.byType(Icon)),
+    );
+
+    for (final (name, queue, sources) in [
+      ('a source that keeps no favourites', null, [_source(favorites: false)]),
+      ('a track of another source', _queue(source: 'jamendo'), null),
+      ('a plugin playing', _queue(source: _qobuz, exclusive: true), null),
+      ('an empty queue', PlayQueueState.empty, null),
+    ]) {
+      testWidgets('$name offers none', (tester) async {
+        final api = _FavoritesApi();
+        await pumpHeart(tester, api, queue: queue, sources: sources);
+        expect(_heart, findsNothing);
+        expect(_hearted, findsNothing);
+        expect(api.asked, isEmpty);
+      });
+    }
+
+    testWidgets('shows what the track\'s source has marked', (tester) async {
+      final api = _FavoritesApi(favorites: {playing});
+      await pumpHeart(tester, api);
+
+      expect(api.asked, [_qobuz]);
+      expect(_hearted, findsOneWidget);
+      expect(_heart, findsNothing);
+      final icon = heartIcon(tester, _hearted);
+      expect(icon.icon, Icons.favorite_rounded);
+      expect(icon.color, KalinkaColors.textSecondary);
+      expect(icon.size, 20);
+      expect(
+        tester.getSemantics(_hearted),
+        matchesSemantics(
+          label: 'Remove from favourites',
+          isButton: true,
+          hasEnabledState: true,
+          isEnabled: true,
+          hasTapAction: true,
+          isFocusable: true,
+          hasFocusAction: true,
+        ),
+      );
+    });
+
+    testWidgets('a tap marks it at once, and sends once', (tester) async {
+      final held = Completer<void>();
+      final api = _FavoritesApi(held: held);
+      final container = await pumpHeart(tester, api);
+      final icon = heartIcon(tester, _heart);
+      expect(icon.icon, Icons.favorite_border_rounded);
+      expect(icon.color, KalinkaColors.textSecondary);
+
+      await tester.tap(_heart);
+      await tester.pump();
+      expect(_hearted, findsOneWidget);
+      await tester.tap(_hearted, warnIfMissed: false);
+      await tester.pump();
+      expect(api.added, [playing]);
+      expect(api.removed, isEmpty);
+
+      held.complete();
+      await tester.pump();
+      expect(_hearted, findsOneWidget);
+      expect(container.read(toastProvider), isEmpty);
+    });
+
+    testWidgets('a tap on a favourite takes it off', (tester) async {
+      final api = _FavoritesApi(favorites: {playing});
+      await pumpHeart(tester, api);
+
+      await tester.tap(_hearted);
+      await tester.pump();
+
+      expect(api.removed, [playing]);
+      expect(api.added, isEmpty);
+      expect(_heart, findsOneWidget);
+    });
+
+    for (final (failure, said) in [
+      (Exception('connection reset'), 'Could not add this track to favourites'),
+      (
+        ServerRefusalException(
+          DioException(requestOptions: RequestOptions()),
+          'demo_read_only',
+          'This is a read-only demo server.',
+        ),
+        'This is a read-only demo server.',
+      ),
+    ]) {
+      testWidgets('a failed mark is taken back: $said', (tester) async {
+        final api = _FavoritesApi(failure: failure);
+        final container = await pumpHeart(tester, api);
+
+        await tester.tap(_heart);
+        await tester.pump();
+
+        expect(api.added, [playing]);
+        expect(_heart, findsOneWidget);
+        expect(_hearted, findsNothing);
+        final toast = container.read(toastProvider).single;
+        expect(toast.message, said);
+        expect(toast.isError, isTrue);
+        expect(toast.inPanel, isTrue);
+        await tester.pump(const Duration(seconds: 30));
+      });
+    }
+
+    testWidgets('a failed removal says so and keeps the mark', (tester) async {
+      final api = _FavoritesApi(
+        favorites: {playing},
+        failure: Exception('connection reset'),
+      );
+      final container = await pumpHeart(tester, api);
+
+      await tester.tap(_hearted);
+      await tester.pump();
+
+      expect(api.removed, [playing]);
+      expect(_hearted, findsOneWidget);
+      expect(
+        container.read(toastProvider).single.message,
+        'Could not remove this track from favourites',
+      );
+      await tester.pump(const Duration(seconds: 30));
+    });
+
+    testWidgets('favourites that could not be read take no tap', (
+      tester,
+    ) async {
+      final api = _FavoritesApi(unknown: true);
+      await pumpHeart(tester, api);
+
+      expect(_heart, findsOneWidget);
+      await tester.tap(_heart, warnIfMissed: false);
+      await tester.pump();
+
+      expect(api.added, isEmpty);
+      expect(api.removed, isEmpty);
+    });
+
+    testWidgets('a server away takes no tap', (tester) async {
+      final api = _FavoritesApi();
+      final container = await pumpHeart(tester, api);
+      (container.read(connectionStateProvider.notifier) as SettableConnection)
+          .set(ConnectionStatus.offline);
+      await tester.pump();
+
+      await tester.tap(_heart, warnIfMissed: false);
+      await tester.pump();
+
+      expect(api.added, isEmpty);
+    });
+
+    testWidgets('a two-line title keeps both on its first line', (
+      tester,
+    ) async {
+      final queue = _queue(source: _qobuz, longNames: true);
+      await _pump(
+        tester,
+        queue: SettableQueue(queue),
+        size: const Size(375, 812),
+        features: _dislikes,
+        api: _FavoritesApi(),
+        sources: [_source()],
+      );
+      final title = tester.getRect(find.text(queue.trackList.first.title));
+
+      _expectTitleActions(
+        tester,
+        queue.trackList.first.title,
+        dislike: true,
+        favorite: true,
+        leftAligned: false,
+      );
+      expect(title.height, greaterThan(tester.getRect(_heart).height));
+      expect(tester.takeException(), isNull);
+    });
+  });
+
   testWidgets('Now Playing updates when only the audio codec changes', (
     tester,
   ) async {
@@ -517,261 +967,314 @@ void main() {
     });
   }
 
-  for (final (size, scale, overlay) in [
-    (const Size(936, 600), 1.0, false),
-    (const Size(1200, 800), 1.0, false),
-    (const Size(936, 1200), 1.0, false),
-    (const Size(1600, 1200), 2.0, false),
-    (const Size(908, 636), 1.0, true),
-    (const Size(1600, 1200), 2.0, true),
-    (const Size(2400, 1600), 3.2, true),
-  ]) {
-    testWidgets(
-      'wide player groups controls beside the cover at $size / $scale / overlay $overlay',
-      (tester) async {
-        final key = GlobalKey();
-        final outputKey = GlobalKey();
-        final container = await _pump(
-          tester,
-          queue: SettableQueue(_queue()),
-          size: size,
-          scale: scale,
-          captureKey: key,
-          overlay: overlay,
-          outputKey: outputKey,
-          outputName: scale > 1
-              ? 'Living room amplifier with a very long device name'
-              : 'SMSL-SU1',
-        );
-        final original = container.read(playQueueStateStoreProvider);
-        final cover = tester.getRect(_art);
-        final controls = find.byKey(
-          const ValueKey('now-playing-landscape-controls'),
-        );
-        expect(controls, findsOneWidget);
-        expect(cover.width, closeTo(320, .01));
-        expect(cover.height, closeTo(320, .01));
-        final progress = tester.getRect(find.byType(PlaybackProgressSlider));
-        expect(progress.left, greaterThan(cover.right));
-        expect(progress.width, lessThanOrEqualTo(560));
-        expect(
-          tester.widget<Text>(find.text('Evening track 0')).style!.fontSize,
-          32,
-        );
-        expect(_rows.evaluate().length, inInclusiveRange(1, 5));
-        expect(tester.getRect(_preview).bottom, lessThanOrEqualTo(size.height));
-        expect(
-          find.byType(RendererSwitcherDropdown).hitTestable(),
-          findsOneWidget,
-        );
-        final headerOutput = find.descendant(
-          of: find.byType(PlayerHeader),
-          matching: find.byKey(outputKey),
-        );
-        expect(headerOutput, findsOneWidget);
-        final output = tester.getRect(headerOutput);
-        final fullscreen = tester.getRect(
-          find.byTooltip('Now-playing display'),
-        );
-        final tabs = tester.getRect(find.byType(PlayerViewSwitch));
-        expect(output.height, greaterThanOrEqualTo(48));
-        expect(output.width, lessThanOrEqualTo(280));
-        expect(output.right + 8, closeTo(fullscreen.left, .01));
-        expect(output.center.dy, closeTo(fullscreen.center.dy, .01));
-        expect(output.left, greaterThanOrEqualTo(tabs.right + 8));
-        expect(tabs.center.dx, closeTo(size.width / 2, .01));
-        final play = tester.getRect(
-          find.ancestor(
-            of: find.byType(PlayPauseGlyph),
-            matching: find.byType(TransportButton),
-          ),
-        );
-        expect(play.width, 68);
-        expect(play.center.dx, closeTo(progress.center.dx, .01));
-        expect(tester.getRect(find.byType(ShuffleButton)).left, progress.left);
-        expect(tester.getRect(find.byType(RepeatButton)).right, progress.right);
-        final scroll = tester.state<ScrollableState>(
-          find.descendant(
-            of: find.byType(NowPlayingContent),
-            matching: find.byType(Scrollable),
-          ),
-        );
-        expect(scroll.position.maxScrollExtent, 0);
-        if (captures != null) {
-          await tester.runAsync(() async {
-            final boundary =
-                key.currentContext!.findRenderObject() as RenderRepaintBoundary;
-            final image = await boundary.toImage();
-            final bytes = await image.toByteData(
-              format: ui.ImageByteFormat.png,
-            );
-            final file = File(
-              '$captures/playing-${size.width}-${size.height}-$scale-$overlay.png',
-            );
-            await file.parent.create(recursive: true);
-            await file.writeAsBytes(bytes!.buffer.asUint8List());
-            image.dispose();
-          });
-        }
-        tester.view.physicalSize = const Size(432, 900);
-        await tester.pumpAndSettle();
-        expect(controls, findsNothing);
-        expect(headerOutput, findsNothing);
-        expect(find.byKey(outputKey), findsOneWidget);
-        tester.view.physicalSize = size;
-        await tester.pumpAndSettle();
-        expect(controls, findsOneWidget);
-        expect(headerOutput, findsOneWidget);
-        expect(container.read(playQueueStateStoreProvider), same(original));
-        expect((container.read(kalinkaWsApiProvider) as _Api).sent, isEmpty);
-        if (overlay && scale == 1) {
-          await tester.tap(headerOutput);
+  for (final (dislike, favorite) in _titleActionCases) {
+    for (final (size, scale, overlay) in [
+      (const Size(936, 600), 1.0, false),
+      (const Size(1200, 800), 1.0, false),
+      (const Size(936, 1200), 1.0, false),
+      (const Size(1600, 1200), 2.0, false),
+      (const Size(908, 636), 1.0, true),
+      (const Size(1600, 1200), 2.0, true),
+      (const Size(2400, 1600), 3.2, true),
+    ]) {
+      testWidgets(
+        'wide player groups controls beside the cover at $size / $scale / overlay $overlay / dislike $dislike / favourite $favorite',
+        (tester) async {
+          final key = GlobalKey();
+          final outputKey = GlobalKey();
+          final container = await _pump(
+            tester,
+            queue: SettableQueue(_queue(source: _qobuz)),
+            size: size,
+            scale: scale,
+            captureKey: key,
+            overlay: overlay,
+            outputKey: outputKey,
+            outputName: scale > 1
+                ? 'Living room amplifier with a very long device name'
+                : 'SMSL-SU1',
+            features: dislike ? _dislikes : null,
+            sources: [_source(favorites: favorite)],
+            api: favorite ? _FavoritesApi() : null,
+          );
+          final original = container.read(playQueueStateStoreProvider);
+          _expectTitleActions(
+            tester,
+            'Evening track 0',
+            dislike: dislike,
+            favorite: favorite,
+            leftAligned: true,
+          );
+          final cover = tester.getRect(_art);
+          final controls = find.byKey(
+            const ValueKey('now-playing-landscape-controls'),
+          );
+          expect(controls, findsOneWidget);
+          expect(cover.width, closeTo(320, .01));
+          expect(cover.height, closeTo(320, .01));
+          final progress = tester.getRect(find.byType(PlaybackProgressSlider));
+          expect(progress.left, greaterThan(cover.right));
+          expect(progress.width, lessThanOrEqualTo(560));
+          expect(
+            tester.widget<Text>(find.text('Evening track 0')).style!.fontSize,
+            32,
+          );
+          expect(_rows.evaluate().length, inInclusiveRange(1, 5));
+          expect(
+            tester.getRect(_preview).bottom,
+            lessThanOrEqualTo(size.height),
+          );
+          expect(
+            find.byType(RendererSwitcherDropdown).hitTestable(),
+            findsOneWidget,
+          );
+          final headerOutput = find.descendant(
+            of: find.byType(PlayerHeader),
+            matching: find.byKey(outputKey),
+          );
+          expect(headerOutput, findsOneWidget);
+          final output = tester.getRect(headerOutput);
+          final fullscreen = tester.getRect(
+            find.byTooltip('Now-playing display'),
+          );
+          final tabs = tester.getRect(find.byType(PlayerViewSwitch));
+          expect(output.height, greaterThanOrEqualTo(48));
+          expect(output.width, lessThanOrEqualTo(280));
+          expect(output.right + 8, closeTo(fullscreen.left, .01));
+          expect(output.center.dy, closeTo(fullscreen.center.dy, .01));
+          expect(output.left, greaterThanOrEqualTo(tabs.right + 8));
+          expect(tabs.center.dx, closeTo(size.width / 2, .01));
+          final play = tester.getRect(
+            find.ancestor(
+              of: find.byType(PlayPauseGlyph),
+              matching: find.byType(TransportButton),
+            ),
+          );
+          expect(play.width, 68);
+          expect(play.center.dx, closeTo(progress.center.dx, .01));
+          expect(
+            tester.getRect(find.byType(ShuffleButton)).left,
+            progress.left,
+          );
+          expect(
+            tester.getRect(find.byType(RepeatButton)).right,
+            progress.right,
+          );
+          final scroll = tester.state<ScrollableState>(
+            find.descendant(
+              of: find.byType(NowPlayingContent),
+              matching: find.byType(Scrollable),
+            ),
+          );
+          expect(scroll.position.maxScrollExtent, 0);
+          if (captures != null) {
+            await tester.runAsync(() async {
+              final boundary =
+                  key.currentContext!.findRenderObject()
+                      as RenderRepaintBoundary;
+              final image = await boundary.toImage();
+              final bytes = await image.toByteData(
+                format: ui.ImageByteFormat.png,
+              );
+              final file = File(
+                '$captures/playing-${size.width}-${size.height}-$scale-$overlay-$dislike-$favorite.png',
+              );
+              await file.parent.create(recursive: true);
+              await file.writeAsBytes(bytes!.buffer.asUint8List());
+              image.dispose();
+            });
+          }
+          tester.view.physicalSize = const Size(432, 900);
           await tester.pumpAndSettle();
-          expect(find.byType(RendererPickerContent), findsOneWidget);
-          await tester.tap(find.byTooltip('Close output picker'));
+          expect(controls, findsNothing);
+          expect(headerOutput, findsNothing);
+          expect(find.byKey(outputKey), findsOneWidget);
+          tester.view.physicalSize = size;
           await tester.pumpAndSettle();
-          expect(find.byType(RendererPickerContent), findsNothing);
-        }
-        expect(tester.takeException(), isNull);
-      },
-    );
+          expect(controls, findsOneWidget);
+          expect(headerOutput, findsOneWidget);
+          expect(container.read(playQueueStateStoreProvider), same(original));
+          expect((container.read(kalinkaWsApiProvider) as _Api).sent, isEmpty);
+          if (overlay && scale == 1) {
+            await tester.tap(headerOutput);
+            await tester.pumpAndSettle();
+            expect(find.byType(RendererPickerContent), findsOneWidget);
+            await tester.tap(find.byTooltip('Close output picker'));
+            await tester.pumpAndSettle();
+            expect(find.byType(RendererPickerContent), findsNothing);
+          }
+          expect(tester.takeException(), isNull);
+        },
+      );
+    }
   }
 
-  for (final (name, size, scale, sideBySide) in [
-    ('short', const Size(432, 720), 1.0, false),
-    ('desktop', const Size(432, 1080), 1.0, false),
-    ('tall', const Size(432, 1200), 1.0, false),
-    ('large-text', const Size(375, 812), 2.0, false),
-    ('landscape', const Size(812, 375), 1.0, true),
-    ('near-square', const Size(432, 540), 1.0, true),
-    ('square', const Size(800, 800), 1.0, true),
-    ('square-long-text', const Size(640, 640), 2.0, true),
-    ('square-large-text', const Size(432, 500), 2.0, false),
-    ('touch-display-large-text', const Size(936, 600), 2.0, true),
-    ('narrow-square', const Size(320, 400), 1.0, false),
-  ]) {
-    testWidgets('$name fits artwork, details and controls without scrolling', (
-      tester,
-    ) async {
-      final captureKey = GlobalKey();
-      final queue = _queue(longNames: name == 'square-long-text');
-      await _pump(
-        tester,
-        queue: SettableQueue(queue),
-        size: size,
-        scale: scale,
-        captureKey: captureKey,
+  for (final (dislike, favorite) in _titleActionCases) {
+    for (final (name, size, scale, sideBySide) in [
+      ('short', const Size(432, 720), 1.0, false),
+      ('long-text', const Size(375, 812), 1.0, false),
+      ('desktop', const Size(432, 1080), 1.0, false),
+      ('tall', const Size(432, 1200), 1.0, false),
+      ('large-text', const Size(375, 812), 2.0, false),
+      ('landscape', const Size(812, 375), 1.0, true),
+      ('near-square', const Size(432, 540), 1.0, true),
+      ('square', const Size(800, 800), 1.0, true),
+      ('square-long-text', const Size(640, 640), 2.0, true),
+      ('square-large-text', const Size(432, 500), 2.0, false),
+      ('touch-display-large-text', const Size(936, 600), 2.0, true),
+      ('narrow-square', const Size(320, 400), 1.0, false),
+    ]) {
+      testWidgets(
+        '$name fits artwork, details and controls without scrolling / dislike $dislike / favourite $favorite',
+        (tester) async {
+          final captureKey = GlobalKey();
+          final queue = _queue(
+            longNames: name.endsWith('long-text'),
+            source: _qobuz,
+          );
+          await _pump(
+            tester,
+            queue: SettableQueue(queue),
+            size: size,
+            scale: scale,
+            captureKey: captureKey,
+            features: dislike ? _dislikes : null,
+            sources: [_source(favorites: favorite)],
+            api: favorite ? _FavoritesApi() : null,
+          );
+          _expectTitleActions(
+            tester,
+            queue.trackList.first.title,
+            dislike: dislike,
+            favorite: favorite,
+            leftAligned: sideBySide,
+          );
+          expect(
+            tester.getTopLeft(_presentation).dy,
+            closeTo(
+              tester.getRect(find.byType(PlayerHeader)).bottom +
+                  (sideBySide ? 8 : 32),
+              0.1,
+            ),
+          );
+          final title = find.text(queue.trackList.first.title);
+          final titleBounds = tester.getRect(title);
+          final artBounds = tester.getRect(_art);
+          final output = find.byType(RendererSwitcherDropdown);
+          expect(output, findsOneWidget);
+          if (name == 'square') {
+            expect(titleBounds.left, greaterThan(artBounds.right));
+            expect(
+              tester.getRect(find.byType(PlaybackProgressSlider)).left,
+              greaterThan(artBounds.right),
+            );
+            expect(artBounds.width, 320);
+          } else if (sideBySide) {
+            expect(titleBounds.left, greaterThan(artBounds.right));
+            expect(
+              tester.getCenter(_metadata).dy,
+              closeTo(
+                tester
+                    .getCenter(
+                      find.byKey(const ValueKey('now-playing-metadata-area')),
+                    )
+                    .dy,
+                0.1,
+              ),
+            );
+            final outputBounds = tester.getRect(output);
+            expect(outputBounds.left, closeTo(titleBounds.left, 0.1));
+            expect(
+              outputBounds.bottom,
+              closeTo(tester.getRect(_presentation).bottom, 0.1),
+            );
+            expect(
+              artBounds.center.dy,
+              closeTo(tester.getRect(_presentation).center.dy, 0.1),
+            );
+            expect(
+              outputBounds.top,
+              greaterThan(tester.getRect(_metadata).bottom),
+            );
+            expect(outputBounds.right, lessThanOrEqualTo(size.width - 16));
+            expect(tester.widget<Text>(title).textAlign, TextAlign.left);
+            for (final text in [
+              queue.trackList.first.performer!.name,
+              'Evening sessions · 2026',
+            ]) {
+              expect(
+                tester.getRect(find.text(text).first).left,
+                titleBounds.left,
+              );
+            }
+          } else {
+            expect(titleBounds.top, greaterThanOrEqualTo(artBounds.bottom));
+          }
+          if (size.height >= 1080) {
+            expect(_preview, findsOneWidget);
+            expect(_rows.evaluate().length, inInclusiveRange(1, 5));
+            expect(
+              tester.getRect(_preview).bottom,
+              lessThanOrEqualTo(size.height),
+            );
+            expect(
+              tester.getRect(_rows.first).top,
+              greaterThan(
+                tester.getRect(find.byType(RendererSwitcherDropdown)).bottom,
+              ),
+            );
+          } else if (!sideBySide) {
+            expect(_preview, findsNothing);
+          }
+          if (name == 'square') {
+            expect(_rows.evaluate().length, inInclusiveRange(1, 5));
+            expect(
+              tester.getRect(_preview).bottom,
+              lessThanOrEqualTo(size.height),
+            );
+          }
+          if (captures != null) {
+            await tester.runAsync(() async {
+              final boundary =
+                  captureKey.currentContext!.findRenderObject()
+                      as RenderRepaintBoundary;
+              final image = await boundary.toImage();
+              final bytes = await image.toByteData(
+                format: ui.ImageByteFormat.png,
+              );
+              final file = File('$captures/$name-$dislike-$favorite.png');
+              await file.parent.create(recursive: true);
+              await file.writeAsBytes(bytes!.buffer.asUint8List());
+              image.dispose();
+            });
+          }
+          final scroll = tester.state<ScrollableState>(
+            find.descendant(
+              of: find.byType(NowPlayingContent),
+              matching: find.byType(Scrollable),
+            ),
+          );
+          expect(scroll.position.maxScrollExtent, closeTo(0, 0.1));
+          expect(scroll.position.pixels, closeTo(0, 0.1));
+          final before = tester.getRect(_presentation);
+          await tester.dragFrom(
+            tester.getTopLeft(_presentation) + const Offset(4, 4),
+            const Offset(0, -150),
+          );
+          await tester.pumpAndSettle();
+          expect(tester.getRect(_presentation), before);
+          expect(scroll.position.pixels, closeTo(0, 0.1));
+          expect(
+            find.byType(RendererSwitcherDropdown).hitTestable(),
+            findsOneWidget,
+          );
+          expect(
+            tester.getBottomRight(find.byType(RendererSwitcherDropdown)).dy,
+            lessThanOrEqualTo(size.height),
+          );
+          expect(tester.takeException(), isNull);
+        },
       );
-      expect(
-        tester.getTopLeft(_presentation).dy,
-        closeTo(
-          tester.getRect(find.byType(PlayerHeader)).bottom +
-              (sideBySide ? 8 : 32),
-          0.1,
-        ),
-      );
-      final title = find.text(queue.trackList.first.title);
-      final titleBounds = tester.getRect(title);
-      final artBounds = tester.getRect(_art);
-      final output = find.byType(RendererSwitcherDropdown);
-      expect(output, findsOneWidget);
-      if (name == 'square') {
-        expect(titleBounds.left, greaterThan(artBounds.right));
-        expect(
-          tester.getRect(find.byType(PlaybackProgressSlider)).left,
-          greaterThan(artBounds.right),
-        );
-        expect(artBounds.width, 320);
-      } else if (sideBySide) {
-        expect(titleBounds.left, greaterThan(artBounds.right));
-        expect(
-          tester.getCenter(_metadata).dy,
-          closeTo(
-            tester
-                .getCenter(
-                  find.byKey(const ValueKey('now-playing-metadata-area')),
-                )
-                .dy,
-            0.1,
-          ),
-        );
-        final outputBounds = tester.getRect(output);
-        expect(outputBounds.left, closeTo(titleBounds.left, 0.1));
-        expect(
-          outputBounds.bottom,
-          closeTo(tester.getRect(_presentation).bottom, 0.1),
-        );
-        expect(
-          artBounds.center.dy,
-          closeTo(tester.getRect(_presentation).center.dy, 0.1),
-        );
-        expect(outputBounds.top, greaterThan(tester.getRect(_metadata).bottom));
-        expect(outputBounds.right, lessThanOrEqualTo(size.width - 16));
-        expect(tester.widget<Text>(title).textAlign, TextAlign.left);
-        for (final text in [
-          queue.trackList.first.performer!.name,
-          'Evening sessions · 2026',
-        ]) {
-          expect(tester.getRect(find.text(text).first).left, titleBounds.left);
-        }
-      } else {
-        expect(titleBounds.top, greaterThanOrEqualTo(artBounds.bottom));
-      }
-      if (size.height >= 1080) {
-        expect(_preview, findsOneWidget);
-        expect(_rows.evaluate().length, inInclusiveRange(1, 5));
-        expect(tester.getRect(_preview).bottom, lessThanOrEqualTo(size.height));
-        expect(
-          tester.getRect(_rows.first).top,
-          greaterThan(
-            tester.getRect(find.byType(RendererSwitcherDropdown)).bottom,
-          ),
-        );
-      } else if (!sideBySide) {
-        expect(_preview, findsNothing);
-      }
-      if (name == 'square') {
-        expect(_rows.evaluate().length, inInclusiveRange(1, 5));
-        expect(tester.getRect(_preview).bottom, lessThanOrEqualTo(size.height));
-      }
-      if (captures != null) {
-        await tester.runAsync(() async {
-          final boundary =
-              captureKey.currentContext!.findRenderObject()
-                  as RenderRepaintBoundary;
-          final image = await boundary.toImage();
-          final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
-          final file = File('$captures/$name.png');
-          await file.parent.create(recursive: true);
-          await file.writeAsBytes(bytes!.buffer.asUint8List());
-          image.dispose();
-        });
-      }
-      final scroll = tester.state<ScrollableState>(
-        find.descendant(
-          of: find.byType(NowPlayingContent),
-          matching: find.byType(Scrollable),
-        ),
-      );
-      expect(scroll.position.maxScrollExtent, closeTo(0, 0.1));
-      expect(scroll.position.pixels, closeTo(0, 0.1));
-      final before = tester.getRect(_presentation);
-      await tester.dragFrom(
-        tester.getTopLeft(_presentation) + const Offset(4, 4),
-        const Offset(0, -150),
-      );
-      await tester.pumpAndSettle();
-      expect(tester.getRect(_presentation), before);
-      expect(scroll.position.pixels, closeTo(0, 0.1));
-      expect(
-        find.byType(RendererSwitcherDropdown).hitTestable(),
-        findsOneWidget,
-      );
-      expect(
-        tester.getBottomRight(find.byType(RendererSwitcherDropdown)).dy,
-        lessThanOrEqualTo(size.height),
-      );
-      expect(tester.takeException(), isNull);
-    });
+    }
   }
 }

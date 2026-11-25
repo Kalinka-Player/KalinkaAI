@@ -393,15 +393,31 @@ class DspProfile_Band_Type extends $pb.ProtobufEnum {
   static const DspProfile_Band_Type HIGH_SHELF =
       DspProfile_Band_Type._(3, _omitEnumNames ? '' : 'HIGH_SHELF');
 
+  /// Second order, 12 dB per octave, shaped by frequency and Q alone.
+  static const DspProfile_Band_Type HIGH_PASS =
+      DspProfile_Band_Type._(4, _omitEnumNames ? '' : 'HIGH_PASS');
+  static const DspProfile_Band_Type LOW_PASS =
+      DspProfile_Band_Type._(5, _omitEnumNames ? '' : 'LOW_PASS');
+
+  /// 6 dB per octave, shaped by frequency alone.
+  static const DspProfile_Band_Type FIRST_ORDER_HIGH_PASS =
+      DspProfile_Band_Type._(6, _omitEnumNames ? '' : 'FIRST_ORDER_HIGH_PASS');
+  static const DspProfile_Band_Type FIRST_ORDER_LOW_PASS =
+      DspProfile_Band_Type._(7, _omitEnumNames ? '' : 'FIRST_ORDER_LOW_PASS');
+
   static const $core.List<DspProfile_Band_Type> values = <DspProfile_Band_Type>[
     UNSPECIFIED,
     PEAK,
     LOW_SHELF,
     HIGH_SHELF,
+    HIGH_PASS,
+    LOW_PASS,
+    FIRST_ORDER_HIGH_PASS,
+    FIRST_ORDER_LOW_PASS,
   ];
 
   static final $core.List<DspProfile_Band_Type?> _byValue =
-      $pb.ProtobufEnum.$_initByValueList(values, 3);
+      $pb.ProtobufEnum.$_initByValueList(values, 7);
   static DspProfile_Band_Type? valueOf($core.int value) =>
       value < 0 || value >= _byValue.length ? null : _byValue[value];
 

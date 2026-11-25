@@ -402,6 +402,7 @@ void main() {
             'channels': 2,
             'signal_path': {
               'steps': [
+                {'kind': 'fir', 'name': 'FIR convolution'},
                 {'kind': 'peq', 'name': 'Parametric EQ', 'summary': 'R3'},
                 {'kind': 'preamp', 'name': 'Preamp', 'summary': '-3 dB'},
                 {
@@ -418,14 +419,15 @@ void main() {
       expect(stages.map((s) => s.label), [
         'Source',
         'Decoded stream',
+        'FIR convolution',
         'Parametric EQ',
-        'Preamp',
+        'Headroom',
         'Dither',
         'Sample rate change',
         'Output',
       ]);
-      expect(stages[2].detail, 'R3');
-      expect(stages[3].detail, '-3 dB');
+      expect(stages[3].detail, 'R3');
+      expect(stages[4].detail, '-3 dB');
     });
     test('a step of a kind the app does not know still shows', () {
       final state = _playing()

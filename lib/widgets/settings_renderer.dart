@@ -105,6 +105,9 @@ class SchemaFieldRenderer extends StatelessWidget {
   /// As [SettingsRow.gutter].
   final double gutter;
 
+  /// Overrides the row insets when the containing card supplies its own.
+  final EdgeInsetsGeometry? contentPadding;
+
   /// A read-only field reporting on this one, shown under its help.
   final FieldSpec? statusField;
 
@@ -113,12 +116,14 @@ class SchemaFieldRenderer extends StatelessWidget {
     required this.field,
     this.listSuggestions = false,
     this.gutter = kSettingsGutter,
+    this.contentPadding,
     this.statusField,
   });
 
   @override
   Widget build(BuildContext context) {
-    final binding = SettingsScope.of(context);
+    final scope = SettingsScope.scopeOf(context);
+    final binding = scope.binding;
     final configuration = ConfigurationAppearance.active(context);
     final label = field.label;
     final help = field.help;
@@ -134,7 +139,9 @@ class SchemaFieldRenderer extends StatelessWidget {
     if (field.readonly) {
       if (field.widget == WidgetKind.text) {
         return Padding(
-          padding: EdgeInsets.symmetric(horizontal: gutter, vertical: 6),
+          padding:
+              contentPadding ??
+              EdgeInsets.symmetric(horizontal: gutter, vertical: 6),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -174,6 +181,7 @@ class SchemaFieldRenderer extends StatelessWidget {
         helpDetails: field.helpDetails,
         isVertical: true,
         gutter: gutter,
+        contentPadding: contentPadding,
         control: SettingsReadonlyCard(text: (value ?? '').toString()),
       );
     }
@@ -182,14 +190,16 @@ class SchemaFieldRenderer extends StatelessWidget {
     // render them bare (no SettingsRow wrapper — that would duplicate the
     // label).
     if (field.widget == WidgetKind.numberSlider) {
-      if (configuration) {
+      if (configuration || scope.splitEditableRows) {
         return SettingsRow(
           label: label,
           sublabel: help,
           helpDetails: field.helpDetails,
           isStaged: isStaged,
           isVertical: true,
+          splitColumns: scope.splitEditableRows,
           gutter: gutter,
+          contentPadding: contentPadding,
           issues: binding.issuesFor(field.path),
           control: buildSliderControl(
             field: field,
@@ -226,24 +236,32 @@ class SchemaFieldRenderer extends StatelessWidget {
         field.widget == WidgetKind.listEditor ||
         field.widget == WidgetKind.folderList;
 
+    final split =
+        scope.splitEditableRows && field.widget != WidgetKind.richText;
+    final control = buildFieldControl(
+      field: field,
+      value: value,
+      options: binding,
+      compact: !(split && field.widget == WidgetKind.numberInput),
+      issues: issues,
+      secretHidden: binding.hasHiddenSecret(field.path),
+      listSuggestions: listSuggestions,
+      onChanged: (v) => binding.stage(field.path, v),
+    );
     return SettingsRow(
       label: label,
       sublabel: help,
       helpDetails: field.helpDetails,
       status: status == null || status.isEmpty ? null : status,
       isStaged: isStaged,
-      isVertical: vertical,
+      isVertical: vertical || field.widget == WidgetKind.richText,
+      splitColumns: split,
       gutter: gutter,
+      contentPadding: contentPadding,
       issues: isList ? const [] : issues,
-      control: buildFieldControl(
-        field: field,
-        value: value,
-        options: binding,
-        issues: issues,
-        secretHidden: binding.hasHiddenSecret(field.path),
-        listSuggestions: listSuggestions,
-        onChanged: (v) => binding.stage(field.path, v),
-      ),
+      control: split && field.widget == WidgetKind.toggle
+          ? Align(alignment: Alignment.centerRight, child: control)
+          : control,
     );
   }
 }

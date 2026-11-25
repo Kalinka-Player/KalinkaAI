@@ -40,14 +40,16 @@ class PinnedCatalog {
   final CatalogPage page;
   final BrowseFilterQuery filter;
   final HomePreviewType preview;
-  final Map<String, String> genreNames;
+
+  /// The names of the values [filter] chose, by value id, for its description.
+  final Map<String, String> valueNames;
   final String? homeName;
 
   const PinnedCatalog({
     required this.page,
     required this.filter,
     required this.preview,
-    this.genreNames = const {},
+    this.valueNames = const {},
     this.homeName,
   });
 
@@ -69,10 +71,16 @@ class PinnedCatalog {
 
   String get key {
     final json = filter.toJson();
+    List<String> sorted(List<String> values) => [...values]..sort();
     for (final field in ['genreIds', 'sources']) {
       if (json[field] case final List<String> values) {
-        json[field] = [...values]..sort();
+        json[field] = sorted(values);
       }
+    }
+    if (json['values'] case final Map<String, List<String>> chosen) {
+      json['values'] = {
+        for (final MapEntry(:key, :value) in chosen.entries) key: sorted(value),
+      };
     }
     return '${page.id}|${jsonEncode(json)}';
   }
@@ -81,7 +89,7 @@ class PinnedCatalog {
     page: page,
     filter: filter,
     preview: value,
-    genreNames: genreNames,
+    valueNames: valueNames,
     homeName: homeName,
   );
 
@@ -89,7 +97,7 @@ class PinnedCatalog {
     page: page,
     filter: filter,
     preview: preview,
-    genreNames: genreNames,
+    valueNames: valueNames,
     homeName: value?.trim().isEmpty == true ? null : value?.trim(),
   );
 
@@ -100,8 +108,8 @@ class PinnedCatalog {
 
   String get filterDescription => [
     if (filter.text.isNotEmpty) '“${filter.text}”',
-    if (filter.genreIds.isNotEmpty)
-      filter.genreIds.map((id) => genreNames[id] ?? id).join(', '),
+    for (final ids in filter.selections.values)
+      if (ids.isNotEmpty) ids.map((id) => valueNames[id] ?? id).join(', '),
     if (filter.type != null) filter.type!.name,
   ].join(' · ');
 
@@ -111,25 +119,35 @@ class PinnedCatalog {
     'preview': preview.name,
     'previewVersion': 3,
     if (homeName != null) 'homeName': homeName,
-    'genreNames': genreNames,
+    // Under the key it had while only genres were named, for older apps.
+    'genreNames': valueNames,
   };
 
-  factory PinnedCatalog.fromJson(Map<String, dynamic> json) => PinnedCatalog(
-    page: CatalogPage.fromJson(Map<String, dynamic>.from(json['page'] as Map)),
-    filter: BrowseFilterQuery.fromJson(
+  factory PinnedCatalog.fromJson(Map<String, dynamic> json) {
+    final page = CatalogPage.fromJson(
+      Map<String, dynamic>.from(json['page'] as Map),
+    );
+    final filter = BrowseFilterQuery.fromJson(
       Map<String, dynamic>.from(json['filter'] as Map),
-    ),
-    genreNames: Map<String, String>.from(json['genreNames'] as Map? ?? {}),
-    homeName: json['homeName'] as String?,
-    // Existing folder pins gain album recognition. Explicit compact choices
-    // remain shortcuts; destinations, filters and order are unchanged.
-    preview: json['previewVersion'] != 3
-        ? json['preview'] == 'compact'
-              ? HomePreviewType.compact
-              : HomePreviewType.automatic
-        : HomePreviewType.values.asNameMap()[json['preview']] ??
-              HomePreviewType.automatic,
-  );
+    );
+    return PinnedCatalog(
+      page: page,
+      // An older app's pin names its values for the page it was pinned on.
+      filter: filter.legacyChoice.isEmpty
+          ? filter
+          : filter.fittedTo(page.filterCapabilities),
+      valueNames: Map<String, String>.from(json['genreNames'] as Map? ?? {}),
+      homeName: json['homeName'] as String?,
+      // Existing folder pins gain album recognition. Explicit compact choices
+      // remain shortcuts; destinations, filters and order are unchanged.
+      preview: json['previewVersion'] != 3
+          ? json['preview'] == 'compact'
+                ? HomePreviewType.compact
+                : HomePreviewType.automatic
+          : HomePreviewType.values.asNameMap()[json['preview']] ??
+                HomePreviewType.automatic,
+    );
+  }
 }
 
 /// Home's pins for the connected server; null until it is known which server

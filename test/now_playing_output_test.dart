@@ -20,6 +20,17 @@ import 'package:kalinka/widgets/volume_control_slider.dart';
 // docked player alike. Neither header carries one; volume lives in the picker.
 
 class _Queue extends PlayQueueStateStore {
+  void clip(int samples) {
+    state = state.apply(
+      PlayQueueEvent.playbackEvent(
+        kind: 'clipping',
+        details: {'clipped_samples': samples},
+        seq: 1,
+      ),
+      0,
+    );
+  }
+
   @override
   PlayQueueState build() => PlayQueueState(
     playbackState: PlaybackState(index: 0, state: PlayerStateType.playing),
@@ -68,7 +79,11 @@ class _Connected extends ConnectionStateNotifier {
   ConnectionStatus build() => ConnectionStatus.connected;
 }
 
-Future<void> _pump(WidgetTester tester, {required bool docked}) async {
+Future<void> _pump(
+  WidgetTester tester, {
+  required bool docked,
+  bool bitPerfect = false,
+}) async {
   tester.view.physicalSize = const Size(1080, 2400);
   tester.view.devicePixelRatio = 2.5;
   addTearDown(tester.view.reset);
@@ -81,7 +96,7 @@ Future<void> _pump(WidgetTester tester, {required bool docked}) async {
         connectionStateProvider.overrideWith(_Connected.new),
         rendererListProvider.overrideWith(_Renderers.new),
         urlResolverProvider.overrideWithValue(UrlResolver('')),
-        bitPerfectProvider.overrideWithValue(false),
+        bitPerfectProvider.overrideWithValue(bitPerfect),
         sourceModulesProvider.overrideWith((ref) => const <ModuleInfo>[]),
       ],
       child: MaterialApp(
@@ -99,6 +114,30 @@ Future<void> _pump(WidgetTester tester, {required bool docked}) async {
 }
 
 void main() {
+  for (final bitPerfect in [false, true]) {
+    testWidgets(
+      'Now Playing updates the clipping badge (bit-perfect $bitPerfect)',
+      (tester) async {
+        await _pump(tester, docked: false, bitPerfect: bitPerfect);
+        final queue = ProviderScope.containerOf(
+          tester.element(find.byType(NowPlayingContent)),
+        ).read(playQueueStateStoreProvider.notifier) as _Queue;
+        for (final count in [12, 0, 3]) {
+          queue.clip(count);
+          await tester.pump();
+          expect(find.text('!'), count > 0 ? findsOneWidget : findsNothing);
+          expect(
+            find.byTooltip('Output clipping detected'),
+            count > 0 ? findsOneWidget : findsNothing,
+          );
+          expect(
+            find.text('1:1'),
+            bitPerfect && count == 0 ? findsOneWidget : findsNothing,
+          );
+        }
+      },
+    );
+  }
   for (final docked in [false, true]) {
     testWidgets('${docked ? 'docked' : 'phone'} player says its output under '
         'the transport, and nowhere above', (tester) async {

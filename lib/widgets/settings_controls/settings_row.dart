@@ -22,6 +22,9 @@ class SettingsRow extends StatelessWidget {
   final Widget control;
   final bool isVertical;
 
+  /// Divide the inner row width equally, stacking both parts in compact panes.
+  final bool splitColumns;
+
   /// What the backend said is wrong with this field's staged value, shown
   /// under the control. Left empty by controls that place them per item.
   final List<ConfigIssue> issues;
@@ -35,6 +38,7 @@ class SettingsRow extends StatelessWidget {
   /// Space either side of the content: [kSettingsGutter] in a settings card,
   /// a sheet's own gutter in a sheet.
   final double gutter;
+  final EdgeInsetsGeometry? contentPadding;
 
   const SettingsRow({
     super.key,
@@ -44,10 +48,12 @@ class SettingsRow extends StatelessWidget {
     this.isStaged = false,
     required this.control,
     this.isVertical = false,
+    this.splitColumns = false,
     this.issues = const [],
     this.action,
     this.status,
     this.gutter = kSettingsGutter,
+    this.contentPadding,
   });
 
   @override
@@ -66,8 +72,17 @@ class SettingsRow extends StatelessWidget {
           ),
         ),
       ),
-      padding: EdgeInsets.symmetric(horizontal: gutter, vertical: 12),
-      child: isVertical
+      padding:
+          contentPadding ??
+          EdgeInsets.symmetric(horizontal: gutter, vertical: 12),
+      child: splitColumns
+          ? Column(
+              children: [
+                _splitRow(context),
+                IssueNotes(issues: issues),
+              ],
+            )
+          : isVertical
           ? Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -98,6 +113,30 @@ class SettingsRow extends StatelessWidget {
             ),
     );
   }
+
+  Widget _splitRow(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      const gap = 12.0;
+      final wide =
+          constraints.maxWidth >=
+          520 * MediaQuery.textScalerOf(context).scale(16) / 16;
+      final width = wide
+          ? (constraints.maxWidth - gap) / 2
+          : constraints.maxWidth;
+      return Flex(
+        direction: wide ? Axis.horizontal : Axis.vertical,
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: wide
+            ? CrossAxisAlignment.center
+            : CrossAxisAlignment.start,
+        spacing: wide ? gap : 10,
+        children: [
+          SizedBox(width: width, child: _buildInfoBlock(context)),
+          SizedBox(width: width, child: control),
+        ],
+      );
+    },
+  );
 
   Widget _buildInfoBlock(BuildContext context) {
     return Column(

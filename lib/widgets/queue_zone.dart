@@ -11,6 +11,7 @@ import '../utils/haptics.dart';
 import '../utils/playback_utils.dart';
 import 'empty_queue_state.dart';
 import 'exclusive_queue_card.dart';
+import 'keep_playing.dart';
 import 'player_sheet.dart';
 import 'queue_item_row.dart';
 import 'queue_columns.dart';
@@ -333,17 +334,10 @@ class _QueueZoneState extends ConsumerState<QueueZone> {
                   ),
                 ),
                 if (queueTracks.isEmpty)
-                  SliverToBoxAdapter(
+                  const SliverToBoxAdapter(
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 24,
-                      ),
-                      child: Text(
-                        'Queue is empty',
-                        style: KalinkaTextStyles.queueItemArtist,
-                        textAlign: TextAlign.center,
-                      ),
+                      padding: EdgeInsets.symmetric(vertical: 24),
+                      child: EmptyUpNext(),
                     ),
                   )
                 else

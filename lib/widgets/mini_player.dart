@@ -18,7 +18,7 @@ import '../utils/click_cursor.dart';
 import '../utils/haptics.dart';
 import '../utils/playback_utils.dart';
 import 'away.dart';
-import 'bit_perfect_badge.dart';
+import 'playback_format_badge.dart';
 import 'column_separator.dart';
 import 'gradient_progress_line.dart';
 import 'kalinka_toast_overlay.dart' show kalinkaMiniPlayerHeight;
@@ -581,7 +581,7 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer>
                   // width. The badge takes the track text's room before it; a
                   // separator brings its own.
                   if (currentTrack != null)
-                    BitPerfectBadge(
+                    PlaybackFormatBadge(
                       margin: wide
                           ? const EdgeInsets.only(right: _badgeGap)
                           : const EdgeInsets.only(left: _badgeGap),

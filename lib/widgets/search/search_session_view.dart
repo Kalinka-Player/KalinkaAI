@@ -693,11 +693,11 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
       // query and the type tab, as clearing the overview's chips does.
       notifier.setResultsFilter(
         session.resultsFilter.copyWith(
-          genreIds: filter.genreIds,
+          selections: filter.selections,
           sources: filter.sources,
         ),
         shown: session.resultsFilter.copyWith(
-          genreIds: _filtersOpenedOn.genreIds,
+          selections: _filtersOpenedOn.selections,
           sources: _filtersOpenedOn.sources,
         ),
         reset: reset,
@@ -720,10 +720,12 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
     }
     final capabilities = session.resultsFilterCapabilities;
     return BrowseFilterCapabilities(
-      genre: capabilities.genre == FacetSupport.hidden
-          ? FacetSupport.unsupported
-          : capabilities.genre,
-      genreOptions: capabilities.genreOptions,
+      choices: [
+        for (final facet in capabilities.choices)
+          facet.support == FacetSupport.hidden
+              ? facet.withSupport(FacetSupport.unsupported)
+              : facet,
+      ],
       source: capabilities.source,
       sources: capabilities.sources,
     );
@@ -732,7 +734,7 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
   BrowseFilterQuery _appliedFilter(SearchSessionState session) =>
       session.activeView == FindMusicView.results
       ? BrowseFilterQuery(
-          genreIds: session.resultsFilter.genreIds,
+          selections: session.resultsFilter.selections,
           sources: session.resultsFilter.sources,
         )
       : session.catalogFilter;

@@ -36,12 +36,14 @@ class ExpertFieldList extends StatefulWidget {
   /// Built as a sliver, for a scroll view of the host's own (its search bar
   /// pinned under whatever the host pins); else a scroll view of its own.
   final bool sliver;
+  final String initialQuery;
 
   const ExpertFieldList({
     super.key,
     required this.fields,
     required this.binding,
     this.sliver = false,
+    this.initialQuery = '',
   });
 
   @override
@@ -57,6 +59,8 @@ class _ExpertFieldListState extends State<ExpertFieldList> {
   @override
   void initState() {
     super.initState();
+    _query = widget.initialQuery;
+    _searchController.text = _query;
     _searchController.addListener(_onSearchChanged);
   }
 

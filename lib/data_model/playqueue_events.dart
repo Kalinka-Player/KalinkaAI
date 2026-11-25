@@ -54,6 +54,12 @@ class PlayQueueState {
   @JsonKey(includeToJson: false)
   final ReceiversSnapshot? receivers;
 
+  /// Whether the server's Keep playing is on: the queue reaching its last
+  /// track is then carried on with tracks like the ones queued. Null from a
+  /// server without the setting (before API 0.27).
+  @JsonKey(includeToJson: false)
+  final bool? keepPlaying;
+
   /// What the current renderer reported happening in each play, taken in
   /// wire order with the states that name the plays. No replay carries them.
   @JsonKey(includeFromJson: false, includeToJson: false)
@@ -70,6 +76,7 @@ class PlayQueueState {
     this.playbackControl = const PlaybackControl.queue(),
     this.modules,
     this.receivers,
+    this.keepPlaying,
     this.playbackEvents = PlaybackEvents.none,
   });
 
@@ -86,6 +93,7 @@ class PlayQueueState {
     PlaybackMode? playbackMode,
     ModulesAndDevices? modules,
     ReceiversSnapshot? receivers,
+    bool? keepPlaying,
     PlaybackEvents? playbackEvents,
     required int seq,
   }) => PlayQueueState(
@@ -99,6 +107,7 @@ class PlayQueueState {
     playbackControl: playbackControl,
     modules: modules ?? this.modules,
     receivers: receivers ?? this.receivers,
+    keepPlaying: keepPlaying ?? this.keepPlaying,
     playbackEvents: playbackEvents ?? this.playbackEvents,
   );
 
@@ -207,6 +216,7 @@ class PlayQueueState {
           playbackControl: playbackControl,
           modules: modules,
           receivers: receivers,
+          keepPlaying: keepPlaying,
           playbackEvents: playbackEvents,
         );
       case CurrentRendererChangedEvent(
@@ -226,6 +236,7 @@ class PlayQueueState {
           playbackControl: playbackControl,
           modules: modules,
           receivers: receivers,
+          keepPlaying: keepPlaying,
           playbackEvents: playbackEvents,
         );
       case PlaybackControlChangedEvent(:final control, :final seq):
@@ -244,6 +255,7 @@ class PlayQueueState {
           playbackControl: control,
           modules: modules,
           receivers: receivers,
+          keepPlaying: keepPlaying,
           playbackEvents: playbackEvents,
         );
       case ModulesChangedEvent(:final modules, :final seq):
@@ -254,6 +266,8 @@ class PlayQueueState {
       case VolumesChangedEvent(:final seq):
         // Kept by the volumes provider, which fetches them on every connect.
         return copyWith(seq: seq);
+      case KeepPlayingChangedEvent(:final enabled, :final seq):
+        return copyWith(keepPlaying: enabled, seq: seq);
       case final PlaybackEvent event:
         // The seq stays: what watches it would rebuild on every event.
         return copyWith(
@@ -278,6 +292,7 @@ class PlayQueueState {
           playbackControl: state.playbackControl,
           modules: state.modules,
           receivers: state.receivers,
+          keepPlaying: state.keepPlaying,
           playbackEvents: playbackEvents.following(
             playbackState,
             nextPlaybackState,
@@ -433,7 +448,8 @@ enum PlayQueueEventType {
   modulesChanged,
   volumesChanged,
   receiversChanged,
-  playbackEvent;
+  playbackEvent,
+  keepPlayingChanged;
 
   String toJson() => _$PlayQueueEventTypeEnumMap[this]!;
 
@@ -528,6 +544,14 @@ sealed class PlayQueueEvent with _$PlayQueueEvent {
     required List<StorageVolume> volumes,
     required int seq,
   }) = VolumesChangedEvent;
+
+  /// The server's Keep playing was turned on or off (API 0.27), from its
+  /// settings or `PUT /queue/keep_playing`. Sent as the server starts too, so
+  /// a replay always carries the setting.
+  const factory PlayQueueEvent.keepPlayingChanged({
+    required bool enabled,
+    required int seq,
+  }) = KeepPlayingChangedEvent;
 
   const factory PlayQueueEvent.receiversChanged({
     required List<ReceiverSnapshot> receivers,
@@ -656,6 +680,11 @@ sealed class PlayQueueEvent with _$PlayQueueEvent {
       case 'volumes_changed':
         return PlayQueueEvent.volumesChanged(
           volumes: StorageVolume.listFromJson(json['volumes']),
+          seq: seq,
+        );
+      case 'keep_playing_changed':
+        return PlayQueueEvent.keepPlayingChanged(
+          enabled: json['enabled'] as bool,
           seq: seq,
         );
       case 'playback_event':

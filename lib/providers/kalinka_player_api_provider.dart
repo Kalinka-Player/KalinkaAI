@@ -1,5 +1,6 @@
 import 'dart:async' show Timer;
 import 'dart:convert' show jsonEncode;
+import 'dart:typed_data';
 
 import 'package:dio/dio.dart'
     show
@@ -76,6 +77,21 @@ abstract class KalinkaPlayerProxy {
   Future<StatusMessage> pause({bool paused = true});
   Future<StatusMessage> stop();
   Future<TrackList> listTracks({int offset = 0, int limit = 100});
+
+  /// Turns the playing track down for this queue's session, steering Keep
+  /// playing and similar tracks away from it, and skips it. False when nothing
+  /// is playing.
+  Future<bool> dislikeCurrent();
+
+  /// Queues tracks like the playing one right after it, from its own source.
+  /// Returns how many came: 0 where that source has none to offer.
+  Future<int> addSimilarTracks();
+
+  /// Saves the server's Keep playing setting. Turned on where the queue
+  /// stands at its last track or has played it out, the server carries it on
+  /// at once and plays on; returns how many tracks that added, 0 where no
+  /// source had any or the queue had not run out.
+  Future<int> setKeepPlaying(bool enabled);
   Future<StatusMessage> setPlaybackMode({
     bool? repeatOne,
     bool? repeatAll,
@@ -172,7 +188,9 @@ abstract class KalinkaPlayerProxy {
   });
   Future<StatusMessage> addFavorite(String id);
   Future<StatusMessage> removeFavorite(String id);
-  Future<FavoriteIds> getFavoriteIds();
+
+  /// What is marked a favourite, in every source or only in [source].
+  Future<FavoriteIds> getFavoriteIds({String? source});
   Future<void> clear();
   Future<void> setVolume(int volume);
   Future<DeviceVolume> getVolume();
@@ -312,7 +330,12 @@ abstract class KalinkaPlayerProxy {
 
   /// Core-owned room profiles are immutable. Publishing returns a new profile ID.
   Future<EqCurve> getEqCurve(String id);
+  Future<RendererConfigResult> editEqCurve(
+    String rendererId,
+    Map<String, String> curve,
+  );
   Future<String> importEqCurve(Map<String, String> payload);
+  Future<String> importFirProfile(Uint8List payload);
 
   /// This renderer's own settings — schema and values together, from
   /// `GET /renderer/{id}/config`. Not part of `/server/config`: the renderer
@@ -566,6 +589,36 @@ class KalinkaPlayerProxyImpl implements KalinkaPlayerProxy {
 
           return TrackList.fromJson(response.data);
         });
+  }
+
+  @override
+  Future<bool> dislikeCurrent() async {
+    try {
+      await client.post('/queue/dislike');
+      return true;
+    } on DioException catch (e) {
+      // A refusal in the server's words is not "nothing is playing".
+      if (e is! ServerRefusalException && e.response?.statusCode == 409) {
+        return false;
+      }
+      rethrow;
+    }
+  }
+
+  @override
+  Future<int> addSimilarTracks() async {
+    final response = await client.post('/queue/similar');
+    return statusMessageFromResponse(response).count ?? 0;
+  }
+
+  @override
+  Future<int> setKeepPlaying(bool enabled) async {
+    final response = await client.put(
+      '/queue/keep_playing',
+      data: {'enabled': enabled},
+      options: Options(contentType: Headers.jsonContentType),
+    );
+    return statusMessageFromResponse(response).count ?? 0;
   }
 
   @override
@@ -894,14 +947,15 @@ class KalinkaPlayerProxyImpl implements KalinkaPlayerProxy {
   }
 
   @override
-  Future<FavoriteIds> getFavoriteIds() async {
-    return client.get('/favorite/ids').then((response) {
-      if (response.statusCode != 200) {
-        throw Exception('Failed to get favorite ids, url=${response.realUri}');
-      }
-
-      return FavoriteIds.fromJson(response.data);
-    });
+  Future<FavoriteIds> getFavoriteIds({String? source}) async {
+    final response = await client.get(
+      '/favorite/ids',
+      queryParameters: source == null ? null : {'source': source},
+    );
+    if (response.statusCode != 200) {
+      throw Exception('Failed to get favorite ids, url=${response.realUri}');
+    }
+    return FavoriteIds.fromJson(response.data);
   }
 
   @override
@@ -1481,6 +1535,29 @@ class KalinkaPlayerProxyImpl implements KalinkaPlayerProxy {
   }
 
   @override
+  Future<RendererConfigResult> editEqCurve(
+    String rendererId,
+    Map<String, String> curve,
+  ) async {
+    try {
+      final response = await client.put(
+        '/renderer/$rendererId/eq',
+        data: curve,
+      );
+      return RendererConfigResult.fromJson(
+        (response.data as Map).cast<String, dynamic>(),
+      );
+    } on DioException catch (e) {
+      final status = e.response?.statusCode;
+      throw RendererConfigException(
+        status == 404 || status == 405
+            ? 'Live EQ editing is unavailable. Update the Core or use Save preset.'
+            : _configFailure(e),
+      );
+    }
+  }
+
+  @override
   Future<EqCurve> getEqCurve(String id) async {
     try {
       final response = await client.get<List<int>>(
@@ -1492,6 +1569,29 @@ class KalinkaPlayerProxyImpl implements KalinkaPlayerProxy {
       throw RendererConfigException(
         e.response?.statusCode == 404
             ? 'This room preset is unavailable on the Core.'
+            : _configFailure(e),
+      );
+    }
+  }
+
+  @override
+  Future<String> importFirProfile(Uint8List payload) async {
+    try {
+      final response = await client.post(
+        '/dsp/profiles/fir',
+        data: payload,
+        options: Options(
+          contentType: 'application/x-protobuf',
+          sendTimeout: const Duration(seconds: 60),
+          receiveTimeout: const Duration(seconds: 60),
+        ),
+      );
+      return (response.data as Map)['id'] as String;
+    } on DioException catch (e) {
+      final data = e.response?.data;
+      throw RendererConfigException(
+        data is Map && data['detail'] is String
+            ? data['detail'] as String
             : _configFailure(e),
       );
     }
@@ -1536,7 +1636,12 @@ class KalinkaPlayerProxyImpl implements KalinkaPlayerProxy {
     try {
       final response = await client.put(
         '/renderer/$rendererId/config',
-        options: Options(contentType: Headers.jsonContentType),
+        options: Options(
+          contentType: Headers.jsonContentType,
+          receiveTimeout: changes.containsKey('output.rew_fir_profile')
+              ? const Duration(seconds: 60)
+              : null,
+        ),
         data: jsonEncode({'changes': changes}),
       );
       return RendererConfigResult.fromJson(
@@ -1563,16 +1668,24 @@ class KalinkaPlayerProxyImpl implements KalinkaPlayerProxy {
     }
   }
 
-  /// Settings travel to the renderer over its socket, so the failures are
-  /// about that hop rather than about the server.
-  static String _configFailure(DioException e) => e is ServerRefusalException
-      ? e.reason
-      : switch (e.response?.statusCode) {
-          404 => 'That output is no longer available',
-          409 => 'That output isn’t connected',
-          504 => 'That output didn’t respond',
-          _ => 'Couldn’t reach that output',
-        };
+  static String _configFailure(DioException e) {
+    if (e is ServerRefusalException) return e.reason;
+    final response = e.response;
+    if (response?.statusCode == 422) {
+      final data = response?.data;
+      if (data case {'detail': final String detail}
+          when detail.trim().isNotEmpty) {
+        return detail;
+      }
+      return 'The Core rejected these settings.';
+    }
+    return switch (response?.statusCode) {
+      404 => 'That output is no longer available',
+      409 => 'That output isn’t connected',
+      504 => 'That output didn’t respond',
+      _ => 'Couldn’t reach that output',
+    };
+  }
 
   // A 404 here is the server rejecting an unknown renderer id, not a missing
   // endpoint — the switcher only exists once `listRenderers` has succeeded.

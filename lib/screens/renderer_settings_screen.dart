@@ -18,6 +18,8 @@ import '../widgets/keyboard/app_keyboard_navigation.dart';
 import '../widgets/connection_banner.dart';
 import '../widgets/configuration_appearance.dart';
 import '../widgets/settings_top_bar.dart';
+import '../widgets/renderer_settings_dashboard.dart';
+import '../widgets/room_eq/eq_card.dart';
 import '../widgets/expert_field_list.dart';
 import '../widgets/demo_read_only_dialog.dart';
 import '../widgets/expert_mode_toggle.dart';
@@ -27,7 +29,6 @@ import '../widgets/onboarding/soundcard_restart_overlay.dart';
 import '../widgets/onboarding/speaker_test_dialog.dart';
 import '../widgets/pending_changes.dart';
 import '../widgets/settings_controls/settings_binding.dart';
-import '../widgets/settings_controls/settings_card.dart';
 import '../widgets/settings_renderer.dart';
 import '../widgets/slide_in_panel.dart';
 import '../widgets/soundcard_row.dart';
@@ -85,13 +86,21 @@ class RendererSettingsScreenState
   String? _section;
   void _openSection(String? id) {
     setState(() => _section = id);
+    _focusBody();
+  }
+
+  void _focusBody() {
     final body = _bodyKey.currentContext;
     if (body != null) {
       AppKeyboardNavigation.focusAfterBuild(body, AppKeyboardArea.content);
     }
   }
 
-  static const _test = '#speaker-test';
+  String? _expertField;
+  RoomEqSection? _roomEqSection;
+  bool _roomEqOpen = false;
+  bool _roomEqCovered = false;
+  final _eqKey = GlobalKey<RoomEqScreenState>();
   final _bodyKey = GlobalKey();
 
   @override
@@ -138,10 +147,28 @@ class RendererSettingsScreenState
     if (!await refusedAsDemo(context, ref)) await _notifier.save();
   }
 
+  Future<void> _edit(String path, dynamic value) async {
+    final state = ref.read(rendererSettingsProvider(widget.rendererId));
+    if (state.saving) return;
+    if (path == RoomEqScreen.firPath &&
+        state.applyCosts[path] == RendererApplyCost.instant) {
+      if (state.values[path] != value &&
+          !await refusedAsDemo(context, ref) &&
+          mounted) {
+        await _notifier.save(immediate: {path: value});
+      }
+      return;
+    }
+    _notifier.stage(path, value);
+  }
+
   /// Leaving with edits staged asks what becomes of them: they live only as
   /// long as the page does.
   Future<bool> _beforeClose(SoundcardBox? restarting) async {
     if (!_mayClose(restarting)) return false;
+    final eq = _eqKey.currentState;
+    if (eq != null && !await eq.mayLeave()) return false;
+    if (!mounted) return false;
     final state = ref.read(rendererSettingsProvider(widget.rendererId));
     if (state.saving) return false;
     if (!state.hasPendingChanges) return true;
@@ -202,12 +229,12 @@ class RendererSettingsScreenState
     final expertMode = ref.watch(expertModeProvider);
 
     final section = state.sections.where((s) => s.id == _section).firstOrNull;
-    final title = expertMode
-        ? widget.rendererName
-        : switch (_section) {
-            _test => 'Speaker test',
-            _ => section?.title ?? widget.rendererName,
-          };
+    final name = state.configuredName ?? widget.rendererName;
+    final title = _expertField != null
+        ? 'Expert settings'
+        : expertMode
+        ? name
+        : section?.title ?? name;
     final content = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -215,7 +242,7 @@ class RendererSettingsScreenState
         SettingsTopBar(
           title: title,
           entryFocus: KeyboardEntryFocus.scope,
-          action: const ExpertModeToggle(),
+          action: _expertField == null ? const ExpertModeToggle() : null,
         ),
         const ConnectionBanner(),
         if (state.saving) const LinearProgressIndicator(minHeight: 2),
@@ -240,44 +267,79 @@ class RendererSettingsScreenState
         : ref.read(soundcardChangeProvider(box).notifier);
     final card = change?.card;
 
-    return SlideInPanel(
-      contentEntryFocus: KeyboardEntryFocus.none,
-      onClose: widget.onClose,
-      // While the box is down, the overlay is all that says why the app waits.
-      beforeClose: () async {
-        if (!expertMode && _section != null) {
-          if (_mayClose(box) && !state.saving) _openSection(null);
-          return false;
-        }
-        return _beforeClose(box);
-      },
-      onCoverageChanged: widget.onCoverageChanged,
-      overlays: [
-        if (box != null && change != null && card != null)
-          SoundcardRestartOverlay(
-            box: box,
-            card: card,
-            afterwards: 'The output comes back by itself.',
-            onKeepWaiting: () => _keepWaiting(box, card),
-            onContinue: change.stopWaiting,
-            continueLabel: 'Continue',
-          ),
-      ],
-      // Material, not a plain Container: the page's text fields and ink need
-      // one, and a host that isn't a Scaffold — a bare route — supplies none.
-      child: Material(
-        color: KalinkaColors.background,
-        child: ConfigurationAppearance(
-          // Revert and Apply ride in the top bar.
-          child: PendingChangesScope(
-            changes: PendingChanges(
-              count: state.pendingCount,
-              consequence: state.pendingCost.warning,
-              busy: state.saving,
-              onDiscard: _notifier.discard,
-              onApply: _apply,
+    return PendingChangesScope(
+      changes: PendingChanges(
+        count: state.pendingCount,
+        consequence: state.pendingCost.warning,
+        busy: state.saving,
+        onDiscard: _notifier.discard,
+        onApply: _apply,
+      ),
+      child: SlideInPanel(
+        contentEntryFocus: KeyboardEntryFocus.none,
+        onClose: widget.onClose,
+        handlesBack: !_roomEqOpen,
+        beforeClose: () async {
+          if (_expertField != null) {
+            if (_mayClose(box) && !state.saving) {
+              setState(() => _expertField = null);
+              _focusBody();
+            }
+            return false;
+          }
+          if (!expertMode && _section != null) {
+            if (_mayClose(box) && !state.saving) _openSection(null);
+            return false;
+          }
+          return _beforeClose(box);
+        },
+        onCoverageChanged: widget.onCoverageChanged,
+        overlays: [
+          if (_roomEqOpen)
+            SlideInPanel(
+              key: const ValueKey('room-eq-panel'),
+              contentEntryFocus: KeyboardEntryFocus.none,
+              handlesBack: box == null || card == null,
+              beforeClose: () async =>
+                  await _eqKey.currentState?.mayLeave() ?? false,
+              onCoverageChanged: (covered) =>
+                  setState(() => _roomEqCovered = covered),
+              onClose: () {
+                setState(() => _roomEqOpen = false);
+                _focusBody();
+              },
+              child: SettingsScope(
+                binding: RendererSettingsBinding(state, _edit),
+                child: RoomEqScreen(
+                  key: _eqKey,
+                  initialSection: _roomEqSection,
+                  rendererId: widget.rendererId,
+                  rendererName: name,
+                ),
+              ),
             ),
-            child: SafeArea(top: false, child: content),
+          if (box != null && change != null && card != null)
+            SoundcardRestartOverlay(
+              box: box,
+              card: card,
+              afterwards: 'The output comes back by itself.',
+              onKeepWaiting: () => _keepWaiting(box, card),
+              onContinue: change.stopWaiting,
+              continueLabel: 'Continue',
+            ),
+        ],
+        child: SizedBox.expand(
+          child: Offstage(
+            offstage: _roomEqCovered,
+            child: IgnorePointer(
+              ignoring: _roomEqOpen,
+              child: Material(
+                color: KalinkaColors.background,
+                child: ConfigurationAppearance(
+                  child: SafeArea(top: false, child: content),
+                ),
+              ),
+            ),
           ),
         ),
       ),
@@ -294,18 +356,20 @@ class RendererSettingsScreenState
       );
     }
 
-    final binding = RendererSettingsBinding(state, _notifier);
+    final binding = RendererSettingsBinding(state, _edit);
 
     // Expert: every field the renderer declared, by path, searchable — the
     // same list the server's settings show, pointed at this renderer. No
     // speaker test here; it belongs with the page, not the flat list.
-    if (expertMode) {
+    if (expertMode || _expertField != null) {
       if (state.expertFields.isEmpty) return _buildLoadFailure(state.error);
       return Column(
+        key: _bodyKey,
         children: [
           if (state.error != null) _ErrorNote(message: state.error!),
           Expanded(
             child: ExpertFieldList(
+              initialQuery: _expertField ?? '',
               fields: state.expertFields,
               binding: binding,
             ),
@@ -314,7 +378,9 @@ class RendererSettingsScreenState
       );
     }
 
-    final hasEq = state.values.containsKey('dsp.profile');
+    final hasPeq = state.values.containsKey('dsp.profile');
+    final hasFir = state.values.containsKey(RoomEqScreen.firPath);
+    final hasEq = hasPeq || hasFir || state.hasHeadroom;
     if (state.sections.isEmpty && !hasEq) {
       // Told apart from "nothing at all": the renderer does have settings,
       // they are just all expert-tier, so point at the switch that shows them.
@@ -329,38 +395,16 @@ class RendererSettingsScreenState
     final card = cardBox == null
         ? null
         : ref.watch(soundcardReportProvider(cardBox)).value;
-    Widget link(
-      String title,
-      IconData icon,
-      VoidCallback open, {
-      String? detail,
-    }) => Material(
-      type: MaterialType.transparency,
-      child: ListTile(
-        leading: Icon(icon),
-        title: Text(title),
-        subtitle: detail == null
-            ? null
-            : Text(detail, maxLines: 2, overflow: TextOverflow.ellipsis),
-        trailing: const Icon(Icons.chevron_right_rounded),
-        onTap: open,
-      ),
-    );
     return SettingsScope(
       key: _bodyKey,
       binding: binding,
+      splitEditableRows: true,
       child: ListView(
         key: PageStorageKey(_section ?? 'renderer-index'),
         padding: const EdgeInsets.symmetric(vertical: 20),
         children: [
           if (state.error != null) _ErrorNote(message: state.error!),
-          if (_section == _test)
-            _SpeakerTestSection(
-              rendererId: widget.rendererId,
-              rendererName: widget.rendererName,
-              hasPendingChanges: state.hasPendingChanges,
-            )
-          else if (section != null)
+          if (section != null)
             SchemaSectionRenderer(
               section: section,
               isTopLevel: true,
@@ -371,58 +415,37 @@ class RendererSettingsScreenState
                   : null,
             )
           else
-            SettingsCard(
-              children: [
-                for (final s in state.sections)
-                  if (s.fields.any(
-                    (f) => !hasEq || !RoomEqScreen.fieldPaths.contains(f.path),
-                  ))
-                    link(
-                      s.title,
-                      switch (s.id) {
-                        'output' => Icons.speaker_outlined,
-                        'renderer' => Icons.settings_input_component_outlined,
-                        _ => Icons.tune_rounded,
-                      },
-                      () => _openSection(s.id),
-                      detail: s.fields
-                          .where(
-                            (f) =>
-                                !hasEq ||
-                                !RoomEqScreen.fieldPaths.contains(f.path),
-                          )
-                          .take(3)
-                          .map((f) => f.label)
-                          .join(' · '),
-                    ),
-                if (hasEq)
-                  link(
-                    'Room EQ',
-                    Icons.equalizer_rounded,
-                    () => Navigator.of(context, rootNavigator: true).push(
-                      MaterialPageRoute<void>(
-                        builder: (_) => RoomEqScreen(
-                          rendererId: widget.rendererId,
-                          rendererName: widget.rendererName,
-                        ),
-                      ),
-                    ),
-                    detail: state.values.containsKey('dsp.preamp')
-                        ? 'Filters, preamp and room presets'
-                        : 'Filters and room presets',
-                  ),
-                if (card != null && cardBox != null)
-                  SoundcardRow(
-                    box: cardBox,
-                    report: card,
-                    host: _soundcardHost,
-                  ),
-                link(
-                  'Speaker test',
-                  Icons.surround_sound_outlined,
-                  () => _openSection(_test),
+            RendererSettingsDashboard(
+              state: state,
+              rendererId: widget.rendererId,
+              rendererName: widget.rendererName,
+              onSection: _openSection,
+              roomEqFields: hasEq ? RoomEqScreen.fieldPaths : const {},
+              firPath: RoomEqScreen.firPath,
+              onRoomEq: (section) => setState(() {
+                _roomEqSection = section;
+                _roomEqOpen = true;
+              }),
+              onExpertField: (path) {
+                setState(() => _expertField = path);
+                _focusBody();
+              },
+              onSpeakerTest: () => showKalinkaDialog<void>(
+                context: context,
+                builder: (_) => SpeakerTestDialog(
+                  targetName: state.configuredName ?? widget.rendererName,
+                  playTone: (channel) => ref
+                      .read(kalinkaProxyProvider)
+                      .testTone(channel, rendererId: widget.rendererId),
                 ),
-              ],
+              ),
+              soundcard: card != null && cardBox != null
+                  ? SoundcardRow(
+                      box: cardBox,
+                      report: card,
+                      host: _soundcardHost,
+                    )
+                  : null,
             ),
         ],
       ),
@@ -581,73 +604,6 @@ class _ErrorNote extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-/// "Test settings" — plays a tone down the left speaker, then the right, so a
-/// device or driver change can be checked by ear.
-class _SpeakerTestSection extends ConsumerWidget {
-  final String rendererId;
-  final String rendererName;
-
-  /// Staged edits are not on the renderer yet, so the tone would come out of
-  /// the old configuration and prove nothing.
-  final bool hasPendingChanges;
-
-  const _SpeakerTestSection({
-    required this.rendererId,
-    required this.rendererName,
-    required this.hasPendingChanges,
-  });
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        SettingsCard(
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text(
-                    hasPendingChanges
-                        ? 'Apply your changes first — the tone plays through '
-                              'the settings currently on this output.'
-                        : 'Plays a tone down the left channel, then the right, '
-                              'so you can check the wiring by ear.',
-                    style: KalinkaTextStyles.trayRowSublabel,
-                  ),
-                  const SizedBox(height: 12),
-                  KalinkaButton(
-                    label: 'Test settings',
-                    variant: KalinkaButtonVariant.neutral,
-                    fullWidth: true,
-                    enabled: !hasPendingChanges,
-                    leading: const Icon(
-                      Icons.volume_up_rounded,
-                      size: 16,
-                      color: KalinkaColors.textPrimary,
-                    ),
-                    onTap: () => showKalinkaDialog<void>(
-                      context: context,
-                      builder: (_) => SpeakerTestDialog(
-                        targetName: rendererName,
-                        playTone: (channel) => ref
-                            .read(kalinkaProxyProvider)
-                            .testTone(channel, rendererId: rendererId),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ],
     );
   }
 }
