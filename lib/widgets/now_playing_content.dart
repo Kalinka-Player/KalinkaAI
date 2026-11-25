@@ -40,6 +40,78 @@ import 'up_next_preview.dart';
 import '../utils/compact_pane_layout.dart';
 import 'keyboard/app_keyboard_navigation.dart';
 
+const _coverGap = 24.0;
+const _controlsMaxWidth = 560.0;
+
+/// The bar's five buttons, and the least the controls take beside a cover.
+const _barTransportWidth = 280.0;
+
+/// How the cover-beside-controls arrangement is set in a pane: the details'
+/// sizes before system text scaling, and what a short pane gives up.
+class _LandscapeFit {
+  final double title;
+  final double artist;
+  final double album;
+
+  /// Lines the title and the artist may each take.
+  final int lines;
+
+  /// Closer spacing between the details, progress and transport.
+  final bool tight;
+  final bool showAlbum;
+  final bool showStream;
+  final bool cover;
+
+  const _LandscapeFit({
+    this.title = 24,
+    this.artist = 16,
+    this.album = 15,
+    this.lines = 1,
+    this.tight = true,
+    this.showAlbum = true,
+    this.showStream = true,
+    this.cover = true,
+  });
+
+  /// The wide pane's, at full size.
+  static const wide = _LandscapeFit(
+    title: 32,
+    artist: 18,
+    album: 16,
+    lines: 2,
+    tight: false,
+  );
+
+  /// A shorter pane's, in the order tried: smaller text, then fewer lines.
+  static const steps = [
+    _LandscapeFit(title: 28, artist: 17, lines: 2, tight: false),
+    _LandscapeFit(lines: 2, tight: false),
+    _LandscapeFit(),
+    _LandscapeFit(showAlbum: false),
+    _LandscapeFit(showAlbum: false, showStream: false),
+  ];
+
+  /// What is left when none of those fit: no cover, the track's name beside
+  /// the transport and the progress under both.
+  static const bar = _LandscapeFit(
+    showAlbum: false,
+    showStream: false,
+    cover: false,
+  );
+
+  bool get full => identical(this, wide);
+  double get titleGap => tight ? 4 : 6;
+  double get progressGap => tight ? 8 : 12;
+  double get transportGap => tight ? 4 : 8;
+
+  TextStyle get titleStyle =>
+      KalinkaTextStyles.expandedTitle.copyWith(fontSize: title);
+  TextStyle get artistStyle =>
+      KalinkaTextStyles.expandedArtist.copyWith(fontSize: artist);
+  TextStyle get albumStyle =>
+      KalinkaTextStyles.expandedAlbum.copyWith(fontSize: album);
+}
+
 /// Core now-playing UI: album art, track info, transport controls, volume.
 /// Used embedded in tablet layout and wrapped with animation in phone overlay.
 class NowPlayingContent extends ConsumerStatefulWidget {
@@ -208,17 +280,18 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
                     constraints.maxWidth,
                     tablet: tabletHeader,
                   ) &&
-                  _widePlayerFits(
-                    currentTrack,
-                    width: constraints.maxWidth - 32,
-                    height:
-                        constraints.maxHeight -
-                        PlayerHeader.heightWithOutput(
-                          context,
-                          tablet: tabletHeader,
-                        ),
-                    outputInHeader: true,
-                  );
+                  _landscapeFit(
+                        currentTrack,
+                        width: constraints.maxWidth - 32,
+                        height:
+                            constraints.maxHeight -
+                            PlayerHeader.heightWithOutput(
+                              context,
+                              tablet: tabletHeader,
+                            ),
+                        outputInHeader: true,
+                      ) !=
+                      null;
               return Column(
                 children: [
                   _buildHeader(
@@ -265,14 +338,10 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
         child: LayoutBuilder(
           builder: (context, constraints) {
             final textScaler = MediaQuery.textScalerOf(context);
-            const metadataGap = 24.0;
-            final metadataMinWidth = textScaler.scale(200);
-            // Near-square and wider player panes can keep the cover beside
-            // the details. Reserve readable text space before choosing this
-            // arrangement, including when the system text size is enlarged.
-            final sideBySide =
-                constraints.maxWidth >= constraints.maxHeight * 0.8 &&
-                constraints.maxWidth >= 144 + metadataGap + metadataMinWidth;
+            final sideBySide = _coverBeside(
+              constraints.maxWidth,
+              constraints.maxHeight,
+            );
             // Start with a comfortable cover size, then give space back to
             // the controls and metadata when the viewport is short.
             final compact =
@@ -297,102 +366,35 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
               grow: grow,
             );
             final short = constraints.maxHeight < 400;
-            final compactWidth = math.min(
-              560.0,
-              constraints.maxWidth - sideArtSize - metadataGap,
-            );
-            if (_widePlayerFits(
+            final fit = _landscapeFit(
               currentTrack,
               width: constraints.maxWidth,
               height: constraints.maxHeight,
               outputInHeader: outputInHeader,
-            )) {
-              return Align(
-                alignment: Alignment.topCenter,
-                child: SizedBox(
-                  width: sideArtSize + metadataGap + compactWidth,
-                  child: CustomScrollView(
-                    primary: false,
-                    physics: const NeverScrollableScrollPhysics(),
-                    slivers: [
-                      SliverToBoxAdapter(
-                        child: AwayDim(
-                          away: away,
-                          child: Padding(
-                            padding: const EdgeInsets.only(top: 8, bottom: 16),
-                            child: Row(
-                              key: const ValueKey('now-playing-presentation'),
-                              crossAxisAlignment: CrossAxisAlignment.center,
-                              children: [
-                                _AlbumArtSection(
-                                  size: sideArtSize,
-                                  trackId: currentTrack?.id,
-                                  resolvedImageUrl: resolvedImageUrl,
-                                ),
-                                const SizedBox(width: metadataGap),
-                                Expanded(
-                                  child: Align(
-                                    alignment: Alignment.centerLeft,
-                                    child: ConstrainedBox(
-                                      key: const ValueKey(
-                                        'now-playing-landscape-controls',
-                                      ),
-                                      constraints: const BoxConstraints(
-                                        maxWidth: 560,
-                                      ),
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          _buildTrackMetadataSection(
-                                            currentTrack: currentTrack,
-                                            sourceInfo: sourceInfo,
-                                            mimeLabel: mimeLabel,
-                                            qualityLabel: qualityLabel,
-                                            leftAligned: true,
-                                            compact: true,
-                                          ),
-                                          const SizedBox(height: 12),
-                                          PlaybackProgressSlider(
-                                            durationMs: durationMs,
-                                            enabled: currentTrack != null,
-                                          ),
-                                          const SizedBox(height: 8),
-                                          ConstrainedBox(
-                                            constraints: BoxConstraints(
-                                              maxWidth: outputInHeader
-                                                  ? double.infinity
-                                                  : 360,
-                                            ),
-                                            child: AwayLock(
-                                              away: away,
-                                              child: _TransportControls(
-                                                compact: !outputInHeader,
-                                                spread: outputInHeader,
-                                              ),
-                                            ),
-                                          ),
-                                          if (!outputInHeader) ...[
-                                            const SizedBox(height: 12),
-                                            _output(away),
-                                          ],
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                      SliverUpNextPreview(
-                        canOpenQueue:
-                            widget.showOverlayHeader || widget.isTablet,
-                      ),
-                    ],
-                  ),
+            );
+            if (fit != null) {
+              return _buildLandscape(
+                fit,
+                pane: constraints.biggest,
+                cover: (size) => _AlbumArtSection(
+                  size: size,
+                  trackId: currentTrack?.id,
+                  resolvedImageUrl: resolvedImageUrl,
                 ),
+                details: _buildTrackMetadataSection(
+                  currentTrack: currentTrack,
+                  sourceInfo: sourceInfo,
+                  mimeLabel: mimeLabel,
+                  qualityLabel: qualityLabel,
+                  leftAligned: true,
+                  fit: fit,
+                ),
+                progress: PlaybackProgressSlider(
+                  durationMs: durationMs,
+                  enabled: currentTrack != null,
+                ),
+                away: away,
+                outputInHeader: outputInHeader,
               );
             }
             final content = AwayDim(
@@ -419,7 +421,7 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
                                   20;
                         final fittedArtSize = coverHeight.clamp(0.0, artSize);
                         final metadataWidth =
-                            available.maxWidth - fittedArtSize - metadataGap;
+                            available.maxWidth - fittedArtSize - _coverGap;
                         // Beside the cover the details grow into the room
                         // there, as far as the cover's height holds them.
                         final metadata = sideBySide
@@ -462,7 +464,7 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
                                           alignment: Alignment.centerLeft,
                                           child: artwork,
                                         ),
-                                        const SizedBox(width: metadataGap),
+                                        const SizedBox(width: _coverGap),
                                         Expanded(
                                           child: Column(
                                             crossAxisAlignment:
@@ -541,6 +543,266 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
     );
   }
 
+  /// The cover beside one column of details, progress and transport. A short
+  /// pane steps [fit] down, and last swaps the cover for a bar.
+  Widget _buildLandscape(
+    _LandscapeFit fit, {
+    required Size pane,
+    required Widget Function(double size) cover,
+    required Widget details,
+    required Widget progress,
+    required bool away,
+    required bool outputInHeader,
+  }) {
+    const presentationKey = ValueKey('now-playing-presentation');
+    final transport = AwayLock(
+      away: away,
+      child: _TransportControls(
+        compact: !fit.full || !outputInHeader,
+        spread: fit.cover && outputInHeader,
+      ),
+    );
+    final double width;
+    final Widget group;
+    if (fit.cover) {
+      final artSize = fit.full
+          ? _sideArtSize(pane.width)
+          : _landscapeArtSize(pane.width, pane.height);
+      width =
+          artSize +
+          _coverGap +
+          math.min(_controlsMaxWidth, pane.width - artSize - _coverGap);
+      group = Row(
+        key: presentationKey,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          cover(artSize),
+          const SizedBox(width: _coverGap),
+          Expanded(
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: ConstrainedBox(
+                key: const ValueKey('now-playing-landscape-controls'),
+                constraints: const BoxConstraints(maxWidth: _controlsMaxWidth),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    details,
+                    SizedBox(height: fit.progressGap),
+                    progress,
+                    SizedBox(height: fit.transportGap),
+                    ConstrainedBox(
+                      constraints: BoxConstraints(
+                        maxWidth: outputInHeader ? double.infinity : 360,
+                      ),
+                      child: transport,
+                    ),
+                    if (!outputInHeader) ...[
+                      const SizedBox(height: 12),
+                      _output(away),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      );
+    } else {
+      width = math.min(pane.width, 904);
+      group = Column(
+        key: presentationKey,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              Expanded(child: details),
+              const SizedBox(width: 16),
+              SizedBox(width: _barTransportWidth, child: transport),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(child: progress),
+              if (!outputInHeader) ...[
+                const SizedBox(width: 12),
+                _output(away),
+              ],
+            ],
+          ),
+        ],
+      );
+    }
+    Widget presentation = AwayDim(
+      away: away,
+      child: Padding(
+        padding: EdgeInsets.only(top: 8, bottom: fit.full ? 16 : 8),
+        child: group,
+      ),
+    );
+    if (!fit.full) {
+      // The steps are measured to fit; only a pane too short for the bar
+      // scales.
+      presentation = ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: pane.height),
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.topCenter,
+          child: SizedBox(width: width, child: presentation),
+        ),
+      );
+    }
+    return Align(
+      alignment: Alignment.topCenter,
+      child: SizedBox(
+        width: width,
+        child: CustomScrollView(
+          primary: false,
+          physics: const NeverScrollableScrollPhysics(),
+          slivers: [
+            SliverToBoxAdapter(child: presentation),
+            SliverUpNextPreview(
+              canOpenQueue: widget.showOverlayHeader || widget.isTablet,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// The last pane fitted, which the header and body share and rebuilds that
+  /// change none of its inputs reuse.
+  (Object, _LandscapeFit?)? _fitted;
+
+  /// How the pane holds the cover beside the controls, or null where the
+  /// controls span it under the cover and details. Header and body choose
+  /// in the same frame.
+  _LandscapeFit? _landscapeFit(
+    Track? track, {
+    required double width,
+    required double height,
+    required bool outputInHeader,
+  }) {
+    final control = ref.read(playbackControlProvider);
+    final links = ref.read(nowPlayingMetadataLinksProvider);
+    final key = (
+      track,
+      width,
+      height,
+      outputInHeader,
+      MediaQuery.textScalerOf(context),
+      DefaultTextStyle.of(context).style,
+      ref.read(playerStateProvider).state == PlayerStateType.error,
+      control.isExclusive ? control.title : null,
+      links.artist != null,
+      links.album != null,
+      ref.read(dislikeAvailableProvider),
+      ref.read(nowPlayingFavoriteProvider) != null,
+    );
+    if (_fitted case (final fitted, final fit) when fitted == key) return fit;
+    final fit = _fitLandscape(
+      track,
+      width: width,
+      height: height,
+      outputInHeader: outputInHeader,
+    );
+    _fitted = (key, fit);
+    return fit;
+  }
+
+  _LandscapeFit? _fitLandscape(
+    Track? track, {
+    required double width,
+    required double height,
+    required bool outputInHeader,
+  }) {
+    if (_widePlayerFits(
+      track,
+      width: width,
+      height: height,
+      outputInHeader: outputInHeader,
+    )) {
+      return _LandscapeFit.wide;
+    }
+    // A wide pane keeps the controls beside the cover. Another moves them
+    // there when too short to hold them under it unscaled. Judged on the pane
+    // alone, so a new track never moves the controls across.
+    if (!compactPaneLayout(width, MediaQuery.textScalerOf(context)) &&
+        (!_coverBeside(width, height) ||
+            width < 144 + _coverGap + _controlsMinWidth() ||
+            height >= _besideHeight())) {
+      return null;
+    }
+    final controlsWidth = math.min(
+      _controlsMaxWidth,
+      width - _landscapeArtSize(width, height) - _coverGap,
+    );
+    final controls =
+        _progressHeight() + 60 + (outputInHeader ? 0 : 12 + _outputHeight());
+    for (final fit in _LandscapeFit.steps) {
+      final needed =
+          16 +
+          _metadataHeight(track, controlsWidth, leftAligned: true, fit: fit) +
+          fit.progressGap +
+          fit.transportGap +
+          controls;
+      if (needed <= height) return fit;
+    }
+    return _LandscapeFit.bar;
+  }
+
+  /// Near-square and wider panes keep the cover beside the details, once
+  /// readable text has its room there at the system's text size.
+  bool _coverBeside(double width, double height) =>
+      width >= height * 0.8 &&
+      width >= 144 + _coverGap + MediaQuery.textScalerOf(context).scale(200);
+
+  /// Room for the transport, and for readable text at the system's size.
+  double _controlsMinWidth() =>
+      math.max(_barTransportWidth, MediaQuery.textScalerOf(context).scale(200));
+
+  /// A short pane's cover is held by its height.
+  double _landscapeArtSize(double width, double height) => math.min(
+    math.min(_sideArtSize(width), width - _coverGap - _controlsMinWidth()),
+    math.max(0, height - 16),
+  );
+
+  double _progressHeight() =>
+      28 +
+      math.max(
+        20.0,
+        MediaQuery.textScalerOf(context)
+                .scale(KalinkaTextStyles.timeLabel.fontSize!) *
+            1.5,
+      );
+
+  /// What the cover beside the details takes over full-width controls with
+  /// every line and note of the details used, whatever the track.
+  double _besideHeight() {
+    final details =
+        _textHeight('X\nX', KalinkaTextStyles.expandedTitle, 2) +
+        6 +
+        _textHeight('X\nX', KalinkaTextStyles.expandedArtist, 2, linked: true) +
+        4 +
+        _textHeight('X', KalinkaTextStyles.expandedAlbum, 1, linked: true) +
+        12 +
+        _textHeight('X', KalinkaTextStyles.expandedAttribution, 1) +
+        8 +
+        _textHeight('X', KalinkaTextStyles.expandedAttribution, 1) +
+        8 +
+        _textHeight('X\nX', KalinkaTextStyles.expandedAttribution, 2);
+    return 8 +
+        details +
+        16 +
+        _outputHeight() +
+        32 +
+        _progressHeight() +
+        20 +
+        68 +
+        24;
+  }
+
   Widget _output(bool away) => AwayLock(
     away: away,
     child: RendererSwitcherDropdown(
@@ -570,8 +832,6 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
     if (!compactPaneLayout(width, scaler)) return false;
     final art = _sideArtSize(width);
     final detailsWidth = math.min(560.0, width - art - 24);
-    final failed = ref.read(playerStateProvider).state == PlayerStateType.error;
-    final exclusive = ref.read(playbackControlProvider).isExclusive;
     final detailsHeight =
         _metadataHeight(
           track,
@@ -579,12 +839,41 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
           grow: 32 / KalinkaTextStyles.expandedTitle.fontSize!,
           leftAligned: true,
         ) +
-        ((outputInHeader ? 156 : 200) +
-                (failed ? 28 : 0) +
-                (exclusive ? 52 : 0)) *
-            scaler.scale(16) /
-            16;
+        (outputInHeader ? 156 : 200) * scaler.scale(16) / 16;
     return math.max(art, detailsHeight) <= height - 24;
+  }
+
+  /// A label's height as its [Text] lays it out, the ambient line height
+  /// included.
+  double _textHeight(
+    String text,
+    TextStyle style,
+    int maxLines, {
+    double width = double.infinity,
+    bool linked = false,
+  }) {
+    final painter =
+        TextPainter(
+          text: TextSpan(
+            text: text,
+            style: DefaultTextStyle.of(context).style.merge(style),
+          ),
+          textDirection: Directionality.of(context),
+          textScaler: MediaQuery.textScalerOf(context),
+          maxLines: maxLines,
+        )..layout(
+          maxWidth: math.max(
+            0,
+            width - (linked ? BrowseMetadataLink.chevronWidth : 0),
+          ),
+        );
+    final height = painter.height;
+    painter.dispose();
+    // A link's row is as tall as its chevron at least.
+    return linked
+        ? math.max(height, BrowseMetadataLink.chevronWidth) +
+              2 * BrowseMetadataLink.verticalPadding
+        : height;
   }
 
   /// Space reserved for stacked metadata before sizing the cover. Measuring
@@ -595,34 +884,22 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
     double width, {
     double grow = 1,
     required bool leftAligned,
+    _LandscapeFit? fit,
   }) {
+    final lines = fit?.lines ?? 2;
     double line(
       String text,
       TextStyle style,
       int maxLines, {
       bool linked = false,
       double trailing = 0,
-    }) {
-      final painter =
-          TextPainter(
-            text: TextSpan(text: text, style: style),
-            textDirection: Directionality.of(context),
-            textScaler: MediaQuery.textScalerOf(context),
-            maxLines: maxLines,
-          )..layout(
-            maxWidth: math.max(
-              0,
-              width - trailing - (linked ? BrowseMetadataLink.chevronWidth : 0),
-            ),
-          );
-      final height = painter.height;
-      painter.dispose();
-      // A link's row is as tall as its chevron at least.
-      return linked
-          ? math.max(height, BrowseMetadataLink.chevronWidth) +
-                2 * BrowseMetadataLink.verticalPadding
-          : height;
-    }
+    }) => _textHeight(
+      text,
+      style,
+      maxLines,
+      width: width - trailing,
+      linked: linked,
+    );
 
     final (:dislike, :favorite) = _titleActions();
     final actions = [dislike, favorite].nonNulls.length;
@@ -630,8 +907,8 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
         math.max(
           line(
             track?.title ?? 'No track',
-            _grown(KalinkaTextStyles.expandedTitle, grow),
-            2,
+            fit?.titleStyle ?? _grown(KalinkaTextStyles.expandedTitle, grow),
+            lines,
             trailing: actions == 0
                 ? 0
                 : leftAligned
@@ -640,35 +917,52 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
           ),
           actions == 0 ? 0.0 : _TitleAction.size,
         ) +
-        6 * grow +
+        (fit?.titleGap ?? 6 * grow) +
         line(
           track?.performer?.name ?? '\u2014',
-          _grown(
-            KalinkaTextStyles.expandedArtist,
-            grow,
-            maxFontSize: _maxArtistFontSize,
-          ),
-          2,
+          fit?.artistStyle ??
+              _grown(
+                KalinkaTextStyles.expandedArtist,
+                grow,
+                maxFontSize: _maxArtistFontSize,
+              ),
+          lines,
           linked: ref.read(nowPlayingMetadataLinksProvider).artist != null,
         );
-    if (track?.album case final album?) {
+    if (track?.album case final album? when fit?.showAlbum ?? true) {
       height +=
           4 * grow +
           line(
             _albumLine(album),
-            _grown(
-              KalinkaTextStyles.expandedAlbum,
-              grow,
-              maxFontSize: _maxAlbumFontSize,
-            ),
+            fit?.albumStyle ??
+                _grown(
+                  KalinkaTextStyles.expandedAlbum,
+                  grow,
+                  maxFontSize: _maxAlbumFontSize,
+                ),
             1,
             linked: ref.read(nowPlayingMetadataLinksProvider).album != null,
           );
     }
-    if (track != null) {
+    if (track != null && (fit?.showStream ?? true)) {
       // The stream's line keeps its size.
       height +=
           12 + line('Signal path', KalinkaTextStyles.expandedAttribution, 1);
+    }
+    // The notes beside the icon under the details.
+    if (ref.read(playerStateProvider).state == PlayerStateType.error) {
+      height += 8 + line('X', KalinkaTextStyles.expandedAttribution, 1);
+    }
+    final control = ref.read(playbackControlProvider);
+    if (control.isExclusive) {
+      height +=
+          8 +
+          _textHeight(
+            'Playing via ${control.title}',
+            KalinkaTextStyles.expandedAttribution,
+            2,
+            width: width - 20,
+          );
     }
     return height;
   }
@@ -691,18 +985,13 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
   }
 
   /// The output switcher under the details beside the cover.
-  double _outputHeight() {
-    final painter = TextPainter(
-      text: TextSpan(text: 'Output', style: KalinkaTextStyles.trayRowSublabel),
-      textDirection: Directionality.of(context),
-      textScaler: MediaQuery.textScalerOf(context),
-      maxLines: 1,
-    )..layout();
-    final height = painter.height;
-    painter.dispose();
-    // Its padding, and the glyphs beside the name.
-    return 20 + math.max(18.0, height);
-  }
+  double _outputHeight() =>
+      // Its padding, and the glyphs beside the name.
+      20 +
+      math.max(
+        20.0,
+        _textHeight('Output', KalinkaTextStyles.trayRowSublabel, 1),
+      );
 
   static TextStyle _grown(
     TextStyle style,
@@ -770,16 +1059,15 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
     required String qualityLabel,
     bool leftAligned = false,
     double grow = 1,
-    bool compact = false,
+    _LandscapeFit? fit,
   }) {
     final textAlign = leftAligned ? TextAlign.left : TextAlign.center;
+    final lines = fit?.lines ?? 2;
     final title = Text(
       currentTrack?.title ?? 'No track',
-      style: compact
-          ? KalinkaTextStyles.expandedTitle.copyWith(fontSize: 32)
-          : _grown(KalinkaTextStyles.expandedTitle, grow),
+      style: fit?.titleStyle ?? _grown(KalinkaTextStyles.expandedTitle, grow),
       textAlign: textAlign,
-      maxLines: 2,
+      maxLines: lines,
       overflow: TextOverflow.ellipsis,
     );
     return Column(
@@ -790,47 +1078,50 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
           : CrossAxisAlignment.center,
       children: [
         _titleWithActions(title, leftAligned: leftAligned),
-        SizedBox(height: 6 * grow),
+        SizedBox(height: fit?.titleGap ?? 6 * grow),
         BrowseMetadataLink(
           label: currentTrack?.performer?.name ?? '\u2014',
           item: ref.read(nowPlayingMetadataLinksProvider).artist,
           onOpen: _openItem,
-          style: compact
-              ? KalinkaTextStyles.expandedArtist.copyWith(fontSize: 18)
-              : _grown(
-                  KalinkaTextStyles.expandedArtist,
-                  grow,
-                  maxFontSize: _maxArtistFontSize,
-                ),
+          style:
+              fit?.artistStyle ??
+              _grown(
+                KalinkaTextStyles.expandedArtist,
+                grow,
+                maxFontSize: _maxArtistFontSize,
+              ),
           textAlign: textAlign,
-          maxLines: 2,
+          maxLines: lines,
         ),
-        if (currentTrack?.album case final album?) ...[
+        if (currentTrack?.album case final album?
+            when fit?.showAlbum ?? true) ...[
           SizedBox(height: 4 * grow),
           BrowseMetadataLink(
             label: _albumLine(album),
             item: ref.read(nowPlayingMetadataLinksProvider).album,
             onOpen: _openItem,
-            style: compact
-                ? KalinkaTextStyles.expandedAlbum.copyWith(fontSize: 16)
-                : _grown(
-                    KalinkaTextStyles.expandedAlbum,
-                    grow,
-                    maxFontSize: _maxAlbumFontSize,
-                  ),
+            style:
+                fit?.albumStyle ??
+                _grown(
+                  KalinkaTextStyles.expandedAlbum,
+                  grow,
+                  maxFontSize: _maxAlbumFontSize,
+                ),
             textAlign: textAlign,
             maxLines: 1,
           ),
         ],
         if (currentTrack != null) ...[
-          const SizedBox(height: 4),
-          _buildSourceAttributionRow(
-            currentTrack: currentTrack,
-            sourceInfo: sourceInfo,
-            mimeLabel: mimeLabel,
-            qualityLabel: qualityLabel,
-            leftAligned: leftAligned,
-          ),
+          if (fit?.showStream ?? true) ...[
+            const SizedBox(height: 4),
+            _buildSourceAttributionRow(
+              currentTrack: currentTrack,
+              sourceInfo: sourceInfo,
+              mimeLabel: mimeLabel,
+              qualityLabel: qualityLabel,
+              leftAligned: leftAligned,
+            ),
+          ],
           const _PlaybackErrorNote(),
           _ExclusivePlaybackNote(textAlign: textAlign),
         ],

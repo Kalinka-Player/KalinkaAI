@@ -1080,6 +1080,187 @@ void main() {
   }
 
   for (final (dislike, favorite) in _titleActionCases) {
+    testWidgets(
+      'a short landscape player steps down beside the cover / dislike $dislike / favourite $favorite',
+      (tester) async {
+        await _pump(
+          tester,
+          queue: SettableQueue(_queue(source: _qobuz)),
+          size: const Size(849, 407),
+          overlay: true,
+          features: dislike ? _dislikes : null,
+          sources: [_source(favorites: favorite)],
+          api: favorite ? _FavoritesApi() : null,
+        );
+        final controls = find.byKey(
+          const ValueKey('now-playing-landscape-controls'),
+        );
+        final title = find.text('Evening track 0');
+        final album = find.text('Evening sessions · 2026');
+        final progress = find.byType(PlaybackProgressSlider);
+        final play = find.ancestor(
+          of: find.byType(PlayPauseGlyph),
+          matching: find.byType(TransportButton),
+        );
+        for (final (height, titleSize, cover, hasAlbum) in [
+          (407.0, 28.0, true, true),
+          (330.0, 24.0, true, true),
+          (300.0, 24.0, true, false),
+          (250.0, 24.0, false, false),
+        ]) {
+          tester.view.physicalSize = Size(849, height);
+          await tester.pumpAndSettle();
+          // Nothing is scaled to fit: the play button keeps its size.
+          expect(tester.getRect(play).width, 60);
+          expect(tester.getRect(progress).bottom, lessThanOrEqualTo(height));
+          final fontSize = tester.widget<Text>(title).style!.fontSize;
+          if (!dislike && !favorite) {
+            expect(fontSize, titleSize);
+            expect(album, hasAlbum ? findsOneWidget : findsNothing);
+          } else {
+            // The 48dp targets make the title's row taller, so the steps may
+            // go further, never less far.
+            expect(fontSize, lessThanOrEqualTo(titleSize));
+            if (!hasAlbum) expect(album, findsNothing);
+          }
+          expect(controls, cover ? findsOneWidget : findsNothing);
+          _expectTitleActions(
+            tester,
+            'Evening track 0',
+            dislike: dislike,
+            favorite: favorite,
+            leftAligned: true,
+          );
+          if (cover) {
+            final art = tester.getRect(_art);
+            expect(art.bottom, lessThanOrEqualTo(height));
+            expect(tester.getRect(title).left, greaterThan(art.right));
+            expect(tester.getRect(progress).left, greaterThan(art.right));
+            expect(tester.getRect(play).bottom, lessThanOrEqualTo(height));
+          } else {
+            // The bar: the track beside the transport, progress under both.
+            expect(_art, findsNothing);
+            expect(
+              tester.getRect(title).right,
+              lessThan(tester.getRect(play).left),
+            );
+            expect(
+              tester.getRect(progress).top,
+              greaterThanOrEqualTo(tester.getRect(play).bottom),
+            );
+          }
+          expect(
+            find
+                .descendant(
+                  of: find.byType(PlayerHeader),
+                  matching: find.byType(RendererSwitcherDropdown),
+                )
+                .hitTestable(),
+            findsOneWidget,
+          );
+          expect(tester.takeException(), isNull);
+        }
+      },
+    );
+  }
+
+  testWidgets(
+    'a short landscape player keeps an output the header cannot hold',
+    (tester) async {
+      await _pump(
+        tester,
+        queue: SettableQueue(_queue()),
+        size: const Size(568, 320),
+        overlay: true,
+      );
+      final output = find.byType(RendererSwitcherDropdown);
+      final progress = find.byType(PlaybackProgressSlider);
+      final play = find.ancestor(
+        of: find.byType(PlayPauseGlyph),
+        matching: find.byType(TransportButton),
+      );
+      for (final (height, cover) in [(320.0, true), (250.0, false)]) {
+        tester.view.physicalSize = Size(568, height);
+        await tester.pumpAndSettle();
+        expect(
+          find.descendant(of: find.byType(PlayerHeader), matching: output),
+          findsNothing,
+        );
+        expect(output.hitTestable(), findsOneWidget);
+        expect(tester.getRect(play).width, 60);
+        expect(tester.getRect(output).bottom, lessThanOrEqualTo(height));
+        if (cover) {
+          // Under the transport, beside the cover.
+          expect(
+            tester.getRect(output).top,
+            greaterThan(tester.getRect(play).bottom),
+          );
+          expect(
+            tester.getRect(output).left,
+            greaterThan(tester.getRect(_art).right),
+          );
+        } else {
+          // At the end of the bar's progress row.
+          expect(_art, findsNothing);
+          expect(
+            tester.getRect(output).left,
+            greaterThan(tester.getRect(progress).right),
+          );
+          expect(
+            tester.getRect(output).top,
+            lessThan(tester.getRect(progress).bottom),
+          );
+        }
+        expect(tester.takeException(), isNull);
+      }
+    },
+  );
+
+  testWidgets('a short landscape player fits its notes unscaled', (
+    tester,
+  ) async {
+    final base = _queue(exclusive: true, longNames: true);
+    await _pump(
+      tester,
+      queue: SettableQueue(
+        PlayQueueState(
+          trackList: base.trackList,
+          playbackState: PlaybackState(
+            state: PlayerStateType.error,
+            currentTrack: base.trackList.first,
+          ),
+          playbackMode: base.playbackMode,
+          playbackControl: base.playbackControl,
+          seq: base.seq,
+        ),
+      ),
+      size: const Size(849, 407),
+      overlay: true,
+    );
+    final play = tester.getRect(
+      find.ancestor(
+        of: find.byType(PlayPauseGlyph),
+        matching: find.byType(TransportButton),
+      ),
+    );
+    final art = tester.getRect(_art);
+    expect(
+      find.byKey(const ValueKey('now-playing-landscape-controls')),
+      findsOneWidget,
+    );
+    expect(play.width, 60);
+    expect(play.bottom, lessThanOrEqualTo(407));
+    for (final note in [
+      find.text('Couldn’t play this track'),
+      find.text('Playing via Connect'),
+    ]) {
+      expect(tester.getRect(note).left, greaterThan(art.right));
+      expect(tester.getRect(note).bottom, lessThan(play.top));
+    }
+    expect(tester.takeException(), isNull);
+  });
+
+  for (final (dislike, favorite) in _titleActionCases) {
     for (final (name, size, scale, sideBySide) in [
       ('short', const Size(432, 720), 1.0, false),
       ('long-text', const Size(375, 812), 1.0, false),
@@ -1132,13 +1313,28 @@ void main() {
           final artBounds = tester.getRect(_art);
           final output = find.byType(RendererSwitcherDropdown);
           expect(output, findsOneWidget);
-          if (name == 'square') {
+          if (const {
+            'square',
+            'landscape',
+            'square-long-text',
+            'touch-display-large-text',
+          }.contains(name)) {
+            // The controls share the cover's side, at their own size.
             expect(titleBounds.left, greaterThan(artBounds.right));
             expect(
               tester.getRect(find.byType(PlaybackProgressSlider)).left,
               greaterThan(artBounds.right),
             );
-            expect(artBounds.width, 320);
+            expect(artBounds.bottom, lessThanOrEqualTo(size.height));
+            final play = tester.getRect(
+              find.ancestor(
+                of: find.byType(PlayPauseGlyph),
+                matching: find.byType(TransportButton),
+              ),
+            );
+            expect(play.width, greaterThanOrEqualTo(60));
+            expect(play.bottom, lessThanOrEqualTo(size.height));
+            if (name == 'square') expect(artBounds.width, 320);
           } else if (sideBySide) {
             expect(titleBounds.left, greaterThan(artBounds.right));
             expect(
