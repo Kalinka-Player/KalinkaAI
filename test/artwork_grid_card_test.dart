@@ -352,7 +352,7 @@ void main() {
   });
 
   group('a cover\'s heart', () {
-    testWidgets('stands left of Play in the circle Play wears', (tester) async {
+    testWidgets('stands opposite Play, in its circle', (tester) async {
       final api = _FavoritesApi();
       await _mount(tester, _albumOf('qobuz'), api: api, sources: _sources);
       await tester.pumpAndSettle();
@@ -362,8 +362,8 @@ void main() {
       final play = tester.getRect(find.byType(RowPlayButton));
       expect(api.asked, ['qobuz']);
       expect(heart.size, play.size);
-      expect(heart.right, play.left);
       expect(heart.top, play.top);
+      expect(heart.left - art.left, art.right - play.right);
       expect(art.contains(heart.topLeft), isTrue);
 
       BoxDecoration circleOf(Finder button) =>

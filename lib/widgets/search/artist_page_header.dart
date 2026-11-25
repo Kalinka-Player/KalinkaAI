@@ -21,23 +21,30 @@ import 'page_favorite_button.dart';
 class ArtistPageHeader extends ConsumerWidget {
   final CatalogPage page;
 
-  /// The releases' Grid/List, at the far end level with the portrait's
-  /// foot; one switching button where the pane is narrow.
+  /// The releases' Grid/List, ending the line that names the source; one
+  /// switching button where the pane is narrow.
   final ListingLayout? presentation;
 
-  /// On the Pin and the heart beside the name, so the page can tell when
-  /// they have scrolled under the bar.
+  /// On the name's row, which holds Pin and the heart, so the page can tell
+  /// when they have scrolled under the bar.
   final Key? actionsKey;
+
+  /// On Grid/List, so the page can tell when it has scrolled under the bar.
+  final Key? presentationKey;
 
   const ArtistPageHeader({
     super.key,
     required this.page,
     this.presentation,
     this.actionsKey,
+    this.presentationKey,
   });
 
   /// The least a name keeps beside Pin and the heart, before text scaling.
   static const _nameRoom = 120.0;
+
+  /// A mark's target and the gap before it.
+  static const _markRoom = 8 + PageFavoriteButton.size;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -110,29 +117,35 @@ class ArtistPageHeader extends ConsumerWidget {
                             textWidthBasis: TextWidthBasis.longestLine,
                           ),
                         );
-                        final actions = Row(
-                          key: actionsKey,
-                          mainAxisSize: MainAxisSize.min,
+                        Widget withHeart(Widget named) => Row(
                           children: [
-                            if (pin)
-                              CatalogPinButton(
-                                page: page,
-                                filter: const BrowseFilterQuery(),
-                              ),
-                            if (favorable) PageFavoriteButton(id: page.id!),
+                            Expanded(child: named),
+                            if (favorable) ...[
+                              const SizedBox(width: 8),
+                              PageFavoriteButton(id: page.id!),
+                            ],
                           ],
                         );
-                        // Together they would leave a phone's name a few
-                        // letters a line, so there they go under it, their
-                        // first glyph at its edge.
-                        if (pin &&
-                            favorable &&
-                            room.maxWidth - 8 - 2 * PageFavoriteButton.size <
-                                _nameRoom * scale) {
+                        final pinButton = CatalogPinButton(
+                          page: page,
+                          filter: const BrowseFilterQuery(),
+                        );
+                        if (!pin) {
+                          return KeyedSubtree(
+                            key: actionsKey,
+                            child: withHeart(title),
+                          );
+                        }
+                        if (room.maxWidth - (favorable ? 2 : 1) * _markRoom <
+                            _nameRoom * scale) {
+                          // Beside the heart too, Pin would leave a phone's
+                          // name a few letters a line, so it goes under it,
+                          // its glyph at the name's edge.
                           return Column(
+                            key: actionsKey,
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              title,
+                              withHeart(title),
                               Transform.translate(
                                 offset: const Offset(
                                   (CatalogPinButton.iconSize -
@@ -140,65 +153,64 @@ class ArtistPageHeader extends ConsumerWidget {
                                       2,
                                   0,
                                 ),
-                                child: actions,
+                                child: pinButton,
                               ),
                             ],
                           );
                         }
-                        return Row(
-                          children: [
-                            Flexible(child: title),
-                            if (pin || favorable) ...[
-                              const SizedBox(width: 8),
-                              actions,
-                            ],
-                          ],
+                        return KeyedSubtree(
+                          key: actionsKey,
+                          child: withHeart(
+                            Row(
+                              children: [
+                                Flexible(child: title),
+                                const SizedBox(width: 8),
+                                pinButton,
+                              ],
+                            ),
+                          ),
                         );
                       },
                     ),
                     const SizedBox(height: 8),
                     Row(
                       children: [
-                        SourceBadge(entityId: page.id!),
-                        if (sourceBadgeVisible(ref, page.id!))
-                          const SizedBox(width: 7),
-                        Flexible(
-                          child: Text(
-                            [
-                              if (provider.isNotEmpty) provider,
-                              if (albums != null)
-                                '$albums ${albums == 1 ? 'album' : 'albums'}',
-                            ].join(' · '),
-                            style: KalinkaTextStyles.trackRowSubtitle,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
+                        Expanded(
+                          child: Row(
+                            children: [
+                              SourceBadge(entityId: page.id!),
+                              if (sourceBadgeVisible(ref, page.id!))
+                                const SizedBox(width: 7),
+                              Flexible(
+                                child: Text(
+                                  [
+                                    if (provider.isNotEmpty) provider,
+                                    if (albums != null)
+                                      '$albums ${albums == 1 ? 'album' : 'albums'}',
+                                  ].join(' · '),
+                                  style: KalinkaTextStyles.trackRowSubtitle,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
+                        // The line under the heart's, so the two never meet
+                        // however the name wraps.
+                        if (presentation case final layout?) ...[
+                          const SizedBox(width: 12),
+                          PresentationToggle(
+                            key: presentationKey,
+                            layout: layout,
+                            compact: constraints.maxWidth < 600 * scale,
+                          ),
+                        ],
                       ],
                     ),
                   ],
                 ),
               ),
-              if (presentation case final layout?) ...[
-                const SizedBox(width: 12),
-                SizedBox(
-                  height: size,
-                  child: Align(
-                    alignment: Alignment.bottomRight,
-                    // Its pill, not its target, ends with the portrait.
-                    child: Transform.translate(
-                      offset: const Offset(
-                        0,
-                        (kKalinkaPillTarget - kKalinkaPillHeight) / 2,
-                      ),
-                      child: PresentationToggle(
-                        layout: layout,
-                        compact: constraints.maxWidth < 600 * scale,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
             ],
           ),
         );

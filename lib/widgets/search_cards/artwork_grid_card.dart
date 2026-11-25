@@ -26,10 +26,11 @@ import 'track_row_support.dart' show ArtStandIn;
 /// An artwork grid item: square covers and round artist portraits followed by
 /// a name and detail, or a catalog's card with its name on it. The cover and
 /// name open its page; Play rests on the cover while the card is lit,
-/// and always on a touch screen, and before it a heart where an album's or
-/// a playlist's source keeps favourites. Long-press takes a playable item
-/// into the selection, as its row would. Under the pointer, held or focused,
-/// the whole card is outlined, as the cards of a Home rail are.
+/// and always on a touch screen, with a heart in the other corner where an
+/// album's or a playlist's source keeps favourites. Long-press takes a
+/// playable item into the selection, as its row would. Under the pointer,
+/// held or focused, the whole card is outlined, as the cards of a Home rail
+/// are.
 class ArtworkGridCard extends ConsumerStatefulWidget {
   final BrowseItem item;
 
@@ -383,6 +384,7 @@ class _ArtworkGridCardState extends ConsumerState<ArtworkGridCard> {
             ),
           if (playable || favorable)
             Positioned(
+              left: 2,
               right: 2,
               bottom: 2,
               child: ListenableBuilder(
@@ -406,8 +408,8 @@ class _ArtworkGridCardState extends ConsumerState<ArtworkGridCard> {
                     ),
                   );
                 },
+                // Between the corners a tap falls through to the card.
                 child: Row(
-                  mainAxisSize: MainAxisSize.min,
                   children: [
                     if (favorable)
                       FavoriteToggle(
@@ -417,6 +419,7 @@ class _ArtworkGridCardState extends ConsumerState<ArtworkGridCard> {
                           focusNode: _favoriteButton,
                         ),
                       ),
+                    const Spacer(),
                     if (playable)
                       Tooltip(
                         message: 'Play (Shift+Enter)',
