@@ -1,0 +1,5 @@
+- Mark tracks, albums, artists and playlists as favourites (server 5.2x, REST 0.27)
+- Turn a track down and keep the queue clear of it
+- Keep playing adds similar tracks once the queue runs out
+- Room EQ gets headroom modes, signed gain and FIR plots
+- Bluetooth setup remembers a Wi-Fi region per streamer

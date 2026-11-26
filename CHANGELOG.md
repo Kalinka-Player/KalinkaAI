@@ -8,6 +8,31 @@ Do not hard-wrap the notes: GitHub renders a newline inside a release body as
 a line break, so a wrapped sentence arrives broken. One line per bullet or
 paragraph, however long; blank lines separate paragraphs.
 
+## 0.29.0
+
+Works with server 5.19.0 or later. Favourites, the thumb-down, Keep playing and similar tracks in the queue need a server speaking REST API 0.27; Room EQ's headroom modes, signed gain and FIR plotting need REST API 0.26, and importing a REW profile needs REST API 0.25 — against an older server none of these show, as before.
+
+### Added
+- Tracks, albums, artists and playlists can be marked a favourite wherever they are listed, with a heart at the end of each page's title; a source that cannot change a favourite says why in the error toast.
+- Now Playing's title carries a thumb-down beside the favourite heart: turning a track down skips it and steers the queue away from it for the session.
+- The queue menu can add tracks like the one playing, from its own source, and Keep playing carries the queue on with similar tracks once it reaches the end, offered from the queue menu and as a message with a button where the queue runs out.
+- Browse filters can filter by decade where a source offers it.
+- Renderer settings gained a Room EQ editor, with a responsive layout and its own place in renderer settings navigation: first- and second-order pass filters, headroom modes and signed gain, rate-matched FIR response plots, and the Core's own reason when it rejects a setting. Room correction integrates live into renderer settings and Now Playing.
+- Bluetooth setup asks for a Wi-Fi region, taken from the platform locale where none was chosen yet, and keeps it per streamer.
+
+### Changed
+- Advertised stereo expansion applies live from the renderer rather than being set in renderer settings.
+- The server upgrade indicator unpacks a box instead of spinning an icon.
+- The Streamer tab's toggles share one size, and its dropdowns match the rest of settings' text.
+- Renderer settings stay open with the miniplayer reachable alongside them.
+- An artist page's Pin moves into the top bar once the header it sits under has scrolled away.
+- Now Playing steps its title down beside the cover in short landscape panes, and holds the thumb-down and heart at the title's edges.
+
+### Fixed
+- Wide catalog cards keep their 300dp minimum width in the web build as well.
+- The library activity's details close once Home is covered by another pane.
+- The Wi-Fi panel keeps the region it opened with once it has scanned, instead of resetting it.
+
 ## 0.28.0
 
 A TV remote drives the Raspberry Pi display, Now Playing shows the signal path down to the renderer's DSP, AI search suggests playlists, and Web Radio stations play one at a time. Works with server 5.19.0 or later. The DSP steps and clipping in the signal path need server 5.20.0 and renderer 0.16.0, and playing a single station needs server 5.20.0; against an older server, the signal path shows the formats it is given and a station listing plays like any other listing.
