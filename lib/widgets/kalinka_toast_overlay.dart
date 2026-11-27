@@ -8,13 +8,14 @@ import '../theme/app_theme.dart';
 import '../utils/click_cursor.dart';
 import 'tap_highlight.dart';
 import 'keyboard/app_keyboard_navigation.dart';
+import 'mini_player.dart' show kMiniPlayerHideDuration;
 
 /// Height of the MiniPlayer (not including SafeArea bottom inset).
 const double kMiniPlayerHeight = 72.0;
 
 /// Shared width cap for notifications in either pane or a single-pane window,
 /// and for the escalation card under them.
-const double kToastMaxWidth = 300;
+const double kToastMaxWidth = 340;
 
 /// Room between a tablet pane's right edge and its notifications.
 const double kToastTabletGutter = 20;
@@ -197,10 +198,22 @@ class KalinkaToastHost extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final inset = math.max(
-      ref.watch(toastBottomInsetProvider),
-      MediaQuery.viewInsetsOf(context).bottom,
+    // Eased as the docked chrome slides, so a showing toast never sits on it.
+    return TweenAnimationBuilder<double>(
+      tween: Tween(end: ref.watch(toastBottomInsetProvider)),
+      duration: MediaQuery.disableAnimationsOf(context)
+          ? Duration.zero
+          : kMiniPlayerHideDuration,
+      curve: Curves.easeOutCubic,
+      builder: (context, docked, _) => _build(
+        context,
+        ref,
+        math.max(docked, MediaQuery.viewInsetsOf(context).bottom),
+      ),
     );
+  }
+
+  Widget _build(BuildContext context, WidgetRef ref, double inset) {
     return LayoutBuilder(
       builder: (context, constraints) {
         // The shell keeps clear of side insets; so do its panes.
@@ -334,7 +347,7 @@ class _ToastCardState extends State<_ToastCard>
             color: isError
                 ? KalinkaColors.actionDeleteSurface
                 : KalinkaColors.surfaceElevated,
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(12),
             border: Border.all(
               color: isError
                   ? KalinkaColors.actionDelete
@@ -349,7 +362,7 @@ class _ToastCardState extends State<_ToastCard>
               ),
             ],
           ),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           child: LayoutBuilder(
             builder: (context, constraints) {
               // The action must not squeeze enlarged messages into a narrow
@@ -372,10 +385,10 @@ class _ToastCardState extends State<_ToastCard>
                 children: [
                   if (widget.entry.isLoading)
                     const SizedBox(
-                      width: 13,
-                      height: 13,
+                      width: 16,
+                      height: 16,
                       child: CircularProgressIndicator(
-                        strokeWidth: 1.8,
+                        strokeWidth: 2,
                         valueColor: AlwaysStoppedAnimation<Color>(
                           KalinkaColors.accentTint,
                         ),
@@ -384,19 +397,19 @@ class _ToastCardState extends State<_ToastCard>
                   else if (isError)
                     const Icon(
                       Icons.error_outline_rounded,
-                      size: 16,
+                      size: 18,
                       color: KalinkaColors.actionDeleteLight,
                     )
                   else
                     Container(
-                      width: 5,
-                      height: 5,
+                      width: 6,
+                      height: 6,
                       decoration: const BoxDecoration(
                         shape: BoxShape.circle,
                         color: KalinkaColors.statusOnline,
                       ),
                     ),
-                  const SizedBox(width: 10),
+                  const SizedBox(width: 12),
                   // Message
                   Flexible(
                     child: SingleChildScrollView(

@@ -9,9 +9,13 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:kalinka/providers/shell_nav_provider.dart';
 import 'package:kalinka/providers/toast_provider.dart';
 import 'package:kalinka/theme/app_theme.dart';
 import 'package:kalinka/widgets/kalinka_toast_overlay.dart';
+import 'package:kalinka/widgets/player_queue_view.dart';
+
+import 'support/home_shell.dart';
 
 const _busy = 'Attic Pi is playing through another Kalinka server';
 const _sheetColor = Color(0xFF00FF00);
@@ -115,8 +119,8 @@ void main() {
     for (final size in [
       const Size(800, 600),
       const Size(375, 812),
-      const Size(333, 600),
-      const Size(332, 600), // Exactly the cap plus both 16dp gutters.
+      const Size(kToastMaxWidth + 33, 600),
+      const Size(kToastMaxWidth + 32, 600), // The cap plus both 16dp gutters.
       const Size(320, 600),
       const Size(812, 375), // Landscape phone, without the navigation rail.
       const Size(1440, 900), // Toast belongs to browsing in the split layout.
@@ -125,12 +129,14 @@ void main() {
       await tester.pumpAndSettle();
 
       final right = size.width == 1440 ? 987.0 : size.width - 16;
-      final width = size.width < 332 ? size.width - 32 : 300.0;
+      final width = size.width < kToastMaxWidth + 32
+          ? size.width - 32
+          : kToastMaxWidth;
       for (final message in ['Service unavailable', 'Queue cleared']) {
         final rect = tester.getRect(_card(message));
         expect(rect.width, width, reason: '$message at $size');
         expect(rect.right, right, reason: '$message at $size');
-        if (size.width <= 332) expect(rect.left, 16);
+        if (size.width <= kToastMaxWidth + 32) expect(rect.left, 16);
       }
       expect(tester.takeException(), isNull);
     }
@@ -175,10 +181,42 @@ void main() {
 
     expect(find.text(_busy), findsOneWidget);
     final rect = tester.getRect(_card(_busy));
-    expect(rect.width, 300);
+    expect(rect.width, kToastMaxWidth);
     expect(rect.right, 1420);
     expect(tester.takeException(), isNull);
     await _retireToast(tester);
+  });
+
+  testWidgets('both panes\' notifications clear the queue\'s window-wide bar', (
+    tester,
+  ) async {
+    final container = await pumpHomeShell(
+      tester,
+      queue: SettableQueue(queueOf(3)),
+      size: const Size(1440, 900),
+      wrapNavigator: (child) => KalinkaToastHost(child: child),
+    );
+    final toasts = container.read(toastProvider.notifier);
+    for (final view in [PlayerView.queue, PlayerView.nowPlaying]) {
+      container.read(playerViewProvider.notifier).show(view);
+      toasts.show('"Track t1" added to queue');
+      toasts.show(_busy, isError: true, inPanel: true);
+      await tester.pumpAndSettle();
+      final floor = view == PlayerView.queue
+          ? tester.getRect(find.byType(QueueMiniPlayer)).top
+          : 900.0;
+      for (final message in ['"Track t1" added to queue', _busy]) {
+        // The pane's 24dp margin, plus the gap under each card; the bar's
+        // top rule rides over browsing's last pixel.
+        expect(
+          tester.getRect(_card(message)).bottom,
+          closeTo(floor - 28, 1),
+          reason: '$message over $view',
+        );
+      }
+      await _retireToast(tester);
+    }
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('queue activity stays compact but long messages obey the cap', (
@@ -190,14 +228,14 @@ void main() {
     await tester.pump(const Duration(milliseconds: 200));
 
     final compact = tester.getRect(_card('Adding…'));
-    expect(compact.width, lessThan(300));
+    expect(compact.width, lessThan(kToastMaxWidth));
     expect(compact.right, 784);
 
     toasts.read(toastProvider.notifier).endQueueActivity(_busy, isError: true);
     await tester.pumpAndSettle();
 
     final wrapped = tester.getRect(_card(_busy));
-    expect(wrapped.width, 300);
+    expect(wrapped.width, kToastMaxWidth);
     expect(wrapped.right, compact.right);
     expect(wrapped.height, greaterThan(compact.height));
     expect(tester.takeException(), isNull);
@@ -368,7 +406,7 @@ void main() {
 
         final card = tester.getRect(_card(message));
         final action = tester.getRect(find.text('Settings'));
-        expect(card.width, 300);
+        expect(card.width, kToastMaxWidth);
         expect(card.top, greaterThanOrEqualTo(8));
         expect(card.bottom, lessThanOrEqualTo(size.height - inset - 8));
         expect(card.contains(action.topLeft), isTrue);

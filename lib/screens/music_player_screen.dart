@@ -1560,26 +1560,27 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
     final rendererSettings = ref.watch(rendererSettingsRouteProvider);
     final disconnected =
         ref.watch(connectionStateProvider) == ConnectionStatus.none;
-    _publishToastInset(24 + _escalationHeight);
+    // The queue's mini-player spans the window, so browsing, and both panes'
+    // toasts, end above it while it shows.
+    final barShowing =
+        !disconnected &&
+        !_keyboardActive &&
+        ref.watch(playerViewProvider) == PlayerView.queue;
+    final barInset = barShowing
+        ? kalinkaMiniPlayerHeight(context) +
+              MediaQuery.paddingOf(context).bottom
+        : 0.0;
+    _publishToastInset(barInset + 24 + _escalationHeight);
     return PopScope(
       canPop: !_pluginsOpen && rendererSettings == null,
       child: LayoutBuilder(
         builder: (context, constraints) {
           final width = constraints.maxWidth;
           final playerWidth = kalinkaPlayerPaneWidth(windowWidth);
-          // The queue's mini-player spans the window, so browsing ends above
-          // it while it shows.
-          final barShowing =
-              !disconnected &&
-              !_keyboardActive &&
-              ref.watch(playerViewProvider) == PlayerView.queue;
-          final barHeight =
-              kalinkaMiniPlayerHeight(context) +
-              MediaQuery.paddingOf(context).bottom;
           // Only the foot animates: the sides follow the window at once, so
           // sheets anchored here track a resize.
           final browsing = TweenAnimationBuilder<double>(
-            tween: Tween(end: barShowing ? barHeight : 0),
+            tween: Tween(end: barInset),
             duration: MediaQuery.disableAnimationsOf(context)
                 ? Duration.zero
                 : kMiniPlayerHideDuration,
@@ -1724,11 +1725,15 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
                           ),
                           // Sheets opened here are anchored to this panel,
                           // so their answers belong over it too.
-                          Positioned(
+                          AnimatedPositioned(
+                            duration: MediaQuery.disableAnimationsOf(context)
+                                ? Duration.zero
+                                : kMiniPlayerHideDuration,
+                            curve: Curves.easeOutCubic,
                             left: kToastTabletGutter,
                             right: kToastTabletGutter,
                             top: MediaQuery.paddingOf(context).top + 8,
-                            bottom: 24,
+                            bottom: barInset + 24,
                             child: const KalinkaToastOverlay(
                               isTablet: true,
                               scope: ToastScope.panel,

@@ -826,7 +826,7 @@ class KalinkaTextStyles {
 
   // Action toast notifications
   static TextStyle toastText = KalinkaFonts.sans(
-    fontSize: KalinkaTypography.baseSize + 2,
+    fontSize: KalinkaTypography.baseSize + 4,
     color: KalinkaColors.textPrimary,
   );
 
