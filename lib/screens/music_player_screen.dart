@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -1566,11 +1568,16 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
         !disconnected &&
         !_keyboardActive &&
         ref.watch(playerViewProvider) == PlayerView.queue;
+    final safeBottom = MediaQuery.paddingOf(context).bottom;
     final barInset = barShowing
-        ? kalinkaMiniPlayerHeight(context) +
-              MediaQuery.paddingOf(context).bottom
+        ? kalinkaMiniPlayerHeight(context) + safeBottom
         : 0.0;
-    _publishToastInset(barInset + 24 + _escalationHeight);
+    // Toasts stand on the bar, else on the safe inset. The escalation card
+    // sits on the bar, or keeps clear of that inset itself.
+    final toastFooting = (barShowing ? barInset : safeBottom) + 24;
+    _publishToastInset(
+      math.max(toastFooting, barInset + _escalationHeight + 24),
+    );
     return PopScope(
       canPop: !_pluginsOpen && rendererSettings == null,
       child: LayoutBuilder(
@@ -1725,18 +1732,22 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
                           ),
                           // Sheets opened here are anchored to this panel,
                           // so their answers belong over it too.
-                          AnimatedPositioned(
-                            duration: MediaQuery.disableAnimationsOf(context)
-                                ? Duration.zero
-                                : kMiniPlayerHideDuration,
-                            curve: Curves.easeOutCubic,
-                            left: kToastTabletGutter,
-                            right: kToastTabletGutter,
-                            top: MediaQuery.paddingOf(context).top + 8,
-                            bottom: barInset + 24,
-                            child: const KalinkaToastOverlay(
-                              isTablet: true,
-                              scope: ToastScope.panel,
+                          ToastClearance(
+                            inset: toastFooting,
+                            builder: (context, footing) => Positioned(
+                              left: kToastTabletGutter,
+                              right: kToastTabletGutter,
+                              top: MediaQuery.paddingOf(context).top + 8,
+                              // Above the floating keyboard too, as the
+                              // window's toasts are.
+                              bottom: math.max(
+                                footing,
+                                MediaQuery.viewInsetsOf(context).bottom,
+                              ),
+                              child: const KalinkaToastOverlay(
+                                isTablet: true,
+                                scope: ToastScope.panel,
+                              ),
                             ),
                           ),
                         ],

@@ -219,6 +219,34 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('toasts rise at once over new chrome and ease down after it', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(400, 800);
+    addTearDown(tester.view.reset);
+    final toasts = await _pumpApp(tester);
+    toasts.read(toastProvider.notifier).show('Queue cleared');
+    await tester.pumpAndSettle();
+    // The phone's 8dp over its dock, and the gap under each card.
+    double clearance() => 800 - tester.getRect(_card('Queue cleared')).bottom;
+    expect(clearance(), 12);
+
+    // A mini-player that appears is covered for no frame at all.
+    toasts.read(toastBottomInsetProvider.notifier).set(72);
+    await tester.pump();
+    expect(clearance(), 84);
+
+    // One that slides away is followed down.
+    toasts.read(toastBottomInsetProvider.notifier).set(0);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 60));
+    expect(clearance(), allOf(greaterThan(12), lessThan(84)));
+    await tester.pumpAndSettle();
+    expect(clearance(), 12);
+    await _retireToast(tester);
+  });
+
   testWidgets('queue activity stays compact but long messages obey the cap', (
     tester,
   ) async {

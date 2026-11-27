@@ -198,14 +198,9 @@ class KalinkaToastHost extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Eased as the docked chrome slides, so a showing toast never sits on it.
-    return TweenAnimationBuilder<double>(
-      tween: Tween(end: ref.watch(toastBottomInsetProvider)),
-      duration: MediaQuery.disableAnimationsOf(context)
-          ? Duration.zero
-          : kMiniPlayerHideDuration,
-      curve: Curves.easeOutCubic,
-      builder: (context, docked, _) => _build(
+    return ToastClearance(
+      inset: ref.watch(toastBottomInsetProvider),
+      builder: (context, docked) => _build(
         context,
         ref,
         math.max(docked, MediaQuery.viewInsetsOf(context).bottom),
@@ -275,6 +270,60 @@ class KalinkaToastHost extends ConsumerWidget {
       },
     );
   }
+}
+
+/// Follows [inset], the room toasts leave under them: up at once, so a toast
+/// never covers chrome that appears, and down at the pace docked chrome
+/// slides away, so it never sits on chrome that is leaving.
+class ToastClearance extends StatefulWidget {
+  final double inset;
+  final Widget Function(BuildContext context, double inset) builder;
+
+  const ToastClearance({super.key, required this.inset, required this.builder});
+
+  @override
+  State<ToastClearance> createState() => _ToastClearanceState();
+}
+
+class _ToastClearanceState extends State<ToastClearance>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl = AnimationController(
+    vsync: this,
+    duration: kMiniPlayerHideDuration,
+  );
+  late Animation<double> _inset = AlwaysStoppedAnimation(widget.inset);
+
+  @override
+  void didUpdateWidget(ToastClearance old) {
+    super.didUpdateWidget(old);
+    final to = widget.inset;
+    if (to == old.inset) return;
+    final from = _inset.value;
+    if (to >= from || MediaQuery.disableAnimationsOf(context)) {
+      _ctrl.stop();
+      _inset = AlwaysStoppedAnimation(to);
+    } else {
+      _inset = _ctrl.drive(
+        Tween(
+          begin: from,
+          end: to,
+        ).chain(CurveTween(curve: Curves.easeOutCubic)),
+      );
+      _ctrl.forward(from: 0);
+    }
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AnimatedBuilder(
+    animation: _ctrl,
+    builder: (context, _) => widget.builder(context, _inset.value),
+  );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
