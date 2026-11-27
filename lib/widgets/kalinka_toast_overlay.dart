@@ -8,13 +8,14 @@ import '../theme/app_theme.dart';
 import '../utils/click_cursor.dart';
 import 'tap_highlight.dart';
 import 'keyboard/app_keyboard_navigation.dart';
+import 'mini_player.dart' show kMiniPlayerHideDuration;
 
 /// Height of the MiniPlayer (not including SafeArea bottom inset).
 const double kMiniPlayerHeight = 72.0;
 
 /// Shared width cap for notifications in either pane or a single-pane window,
 /// and for the escalation card under them.
-const double kToastMaxWidth = 300;
+const double kToastMaxWidth = 340;
 
 /// Room between a tablet pane's right edge and its notifications.
 const double kToastTabletGutter = 20;
@@ -197,10 +198,17 @@ class KalinkaToastHost extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final inset = math.max(
-      ref.watch(toastBottomInsetProvider),
-      MediaQuery.viewInsetsOf(context).bottom,
+    return ToastClearance(
+      inset: ref.watch(toastBottomInsetProvider),
+      builder: (context, docked) => _build(
+        context,
+        ref,
+        math.max(docked, MediaQuery.viewInsetsOf(context).bottom),
+      ),
     );
+  }
+
+  Widget _build(BuildContext context, WidgetRef ref, double inset) {
     return LayoutBuilder(
       builder: (context, constraints) {
         // The shell keeps clear of side insets; so do its panes.
@@ -262,6 +270,60 @@ class KalinkaToastHost extends ConsumerWidget {
       },
     );
   }
+}
+
+/// Follows [inset], the room toasts leave under them: up at once, so a toast
+/// never covers chrome that appears, and down at the pace docked chrome
+/// slides away, so it never sits on chrome that is leaving.
+class ToastClearance extends StatefulWidget {
+  final double inset;
+  final Widget Function(BuildContext context, double inset) builder;
+
+  const ToastClearance({super.key, required this.inset, required this.builder});
+
+  @override
+  State<ToastClearance> createState() => _ToastClearanceState();
+}
+
+class _ToastClearanceState extends State<ToastClearance>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl = AnimationController(
+    vsync: this,
+    duration: kMiniPlayerHideDuration,
+  );
+  late Animation<double> _inset = AlwaysStoppedAnimation(widget.inset);
+
+  @override
+  void didUpdateWidget(ToastClearance old) {
+    super.didUpdateWidget(old);
+    final to = widget.inset;
+    if (to == old.inset) return;
+    final from = _inset.value;
+    if (to >= from || MediaQuery.disableAnimationsOf(context)) {
+      _ctrl.stop();
+      _inset = AlwaysStoppedAnimation(to);
+    } else {
+      _inset = _ctrl.drive(
+        Tween(
+          begin: from,
+          end: to,
+        ).chain(CurveTween(curve: Curves.easeOutCubic)),
+      );
+      _ctrl.forward(from: 0);
+    }
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AnimatedBuilder(
+    animation: _ctrl,
+    builder: (context, _) => widget.builder(context, _inset.value),
+  );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -334,7 +396,7 @@ class _ToastCardState extends State<_ToastCard>
             color: isError
                 ? KalinkaColors.actionDeleteSurface
                 : KalinkaColors.surfaceElevated,
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(12),
             border: Border.all(
               color: isError
                   ? KalinkaColors.actionDelete
@@ -349,7 +411,7 @@ class _ToastCardState extends State<_ToastCard>
               ),
             ],
           ),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           child: LayoutBuilder(
             builder: (context, constraints) {
               // The action must not squeeze enlarged messages into a narrow
@@ -372,10 +434,10 @@ class _ToastCardState extends State<_ToastCard>
                 children: [
                   if (widget.entry.isLoading)
                     const SizedBox(
-                      width: 13,
-                      height: 13,
+                      width: 16,
+                      height: 16,
                       child: CircularProgressIndicator(
-                        strokeWidth: 1.8,
+                        strokeWidth: 2,
                         valueColor: AlwaysStoppedAnimation<Color>(
                           KalinkaColors.accentTint,
                         ),
@@ -384,19 +446,19 @@ class _ToastCardState extends State<_ToastCard>
                   else if (isError)
                     const Icon(
                       Icons.error_outline_rounded,
-                      size: 16,
+                      size: 18,
                       color: KalinkaColors.actionDeleteLight,
                     )
                   else
                     Container(
-                      width: 5,
-                      height: 5,
+                      width: 6,
+                      height: 6,
                       decoration: const BoxDecoration(
                         shape: BoxShape.circle,
                         color: KalinkaColors.statusOnline,
                       ),
                     ),
-                  const SizedBox(width: 10),
+                  const SizedBox(width: 12),
                   // Message
                   Flexible(
                     child: SingleChildScrollView(

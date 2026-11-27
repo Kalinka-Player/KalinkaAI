@@ -25,6 +25,7 @@ import 'package:kalinka/widgets/expert_settings_screen.dart';
 import 'package:kalinka/widgets/configuration_appearance.dart';
 import 'package:kalinka/widgets/settings_controls/settings_action_row.dart';
 import 'package:kalinka/widgets/escalation_card.dart';
+import 'package:kalinka/widgets/kalinka_toast_overlay.dart';
 import 'package:kalinka/widgets/kalinka_button.dart';
 import 'package:kalinka/widgets/kalinka_dialog.dart';
 import 'package:kalinka/widgets/timezone_row.dart';
@@ -832,11 +833,15 @@ void main() {
 
       // Below the cap plus gutters, yet wide enough for the test font's
       // square glyphs to fit 'Scan for servers'.
-      for (final width in [1200.0, 332.0, 326.0]) {
+      for (final width in [1200.0, kToastMaxWidth + 32, 326.0]) {
         tester.view.physicalSize = Size(width, 800);
         await tester.pumpAndSettle();
         final card = tester.getRect(find.byKey(EscalationCard.cardKey));
-        expect(card.width, width < 332 ? width - 32 : 300, reason: '$width');
+        expect(
+          card.width,
+          width < kToastMaxWidth + 32 ? width - 32 : kToastMaxWidth,
+          reason: '$width',
+        );
         expect(card.right, width - 16, reason: '$width');
         expect(tester.takeException(), isNull);
       }
