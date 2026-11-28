@@ -78,7 +78,7 @@ class ScheduledPowerOffNotifier extends Notifier<PowerOffDue?> {
 
   @override
   PowerOffDue? build() {
-    ref.watch(connectionSettingsProvider.select((s) => s.address));
+    ref.watch(connectionSettingsProvider.select((s) => s.serverChoice));
     ref.listen<ConnectionStatus>(connectionStateProvider, (previous, next) {
       if (previous == ConnectionStatus.connected &&
           next == ConnectionStatus.reconnecting) {

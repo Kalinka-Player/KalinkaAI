@@ -322,4 +322,29 @@ void main() {
       });
     });
   }
+
+  test('keeps waiting for the same server at another of its addresses', () {
+    fakeAsync((clock) {
+      final api = _Api();
+      final container = ProviderContainer(
+        overrides: [
+          sharedPrefsProvider.overrideWithValue(prefs),
+          kalinkaProxyProvider.overrideWithValue(api),
+        ],
+      );
+      addTearDown(container.dispose);
+      container.read(restartProvider.notifier).executeRestart();
+      clock.flushMicrotasks();
+      clock.elapse(const Duration(seconds: 4));
+      final probes = api.probes;
+
+      container
+          .read(connectionSettingsProvider.notifier)
+          .moveTo('10.0.0.4', 8000);
+      clock.flushMicrotasks();
+      clock.elapse(const Duration(seconds: 10));
+      expect(api.probes, greaterThan(probes));
+      expect(container.read(restartProvider).isRestarting, isTrue);
+    });
+  });
 }

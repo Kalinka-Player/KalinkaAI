@@ -750,7 +750,7 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
     _prefs.remove(_resultsFilterKey);
     _sessionServer = ref.read(serverStorageKeyProvider)?.scope;
     // Another server's results and pages mean nothing on this one.
-    ref.listen(connectionSettingsProvider.select((s) => s.baseUrl), (
+    ref.listen(connectionSettingsProvider.select((s) => s.serverChoice), (
       previous,
       next,
     ) {

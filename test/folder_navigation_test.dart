@@ -9,6 +9,7 @@ import 'package:kalinka/providers/box_control_provider.dart';
 import 'package:kalinka/providers/connection_settings_provider.dart';
 import 'package:kalinka/providers/connection_state_provider.dart';
 import 'package:kalinka/providers/search_session_provider.dart';
+import 'package:kalinka/providers/server_endpoints.dart';
 
 import 'support/home_shell.dart' show SettableConnection;
 import 'support/server_answer.dart';
@@ -399,6 +400,32 @@ void main() {
 
     expect(state().folderPath, isEmpty);
   });
+
+  test(
+    'the same server at another of its addresses keeps the page open',
+    () async {
+      container
+          .read(connectionSettingsProvider.notifier)
+          .setDeviceEphemeral('Living room', '10.0.0.3', 8000);
+      await container.read(serverAnswerProvider.future);
+      openLibrary(container);
+      session().openFolder(_folder('Jazz'));
+      (container.read(connectionStateProvider.notifier) as SettableConnection)
+          .set(ConnectionStatus.reconnecting);
+
+      // As the reconnect cycle follows the server there.
+      const wifi = (scheme: 'http', host: '10.0.0.4', port: 8000);
+      container.read(serverEndpointStoreProvider).confirmedAt('box-1', wifi);
+      await container
+          .read(connectionSettingsProvider.notifier)
+          .moveTo(wifi.host, wifi.port);
+      await container.read(serverAnswerProvider.future);
+      await pumpEventQueue();
+
+      expect(shownPath(), ['Jazz']);
+      expect(state().catalogPage.isRoot, isFalse);
+    },
+  );
 
   test('a page of another layout keeps no folder', () {
     session().openFolder(_folder('Jazz'));

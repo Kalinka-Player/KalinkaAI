@@ -17,6 +17,7 @@ import 'package:kalinka/providers/demo_mode.dart';
 import 'package:kalinka/providers/kalinka_player_api_provider.dart';
 import 'package:kalinka/providers/kiosk_provider.dart';
 import 'package:kalinka/providers/pinned_catalogs_provider.dart';
+import 'package:kalinka/providers/server_endpoints.dart';
 import 'package:kalinka/providers/supervisor_api.dart';
 import 'package:kalinka/providers/timezone_provider.dart';
 import 'package:kalinka/providers/toast_provider.dart';
@@ -361,27 +362,68 @@ void main() {
   });
 
   group('rememberServerIdentityProvider', () {
-    test('remembers the connected server under its address', () async {
-      final container = await _container(box: null, identity: 'box-1');
+    const address = (scheme: 'http', host: 'kalinka.local', port: 8000);
 
+    Future<ProviderContainer> answered(
+      String? id, {
+      Map<String, Object> stored = const {},
+    }) async {
+      final container = await _container(
+        box: null,
+        stored: stored,
+        overrides: [serverAnswering(id)],
+      );
       container.read(rememberServerIdentityProvider);
-      await container.read(serverIdentityProvider.future);
+      await container.read(serverAnswerProvider.future);
       await Future<void>.delayed(Duration.zero);
+      return container;
+    }
+
+    test('remembers the connected server under its address', () async {
+      final container = await answered('box-1');
+      expect(container.read(sharedPrefsProvider).getString(_knownKey), 'box-1');
+    });
+
+    test('keeps the address among the connected server\'s own', () async {
+      final container = await answered('box-1');
+
+      final store = container.read(serverEndpointStoreProvider);
+      expect(
+        [for (final e in store.endpointsOf('box-1')) '${e.host}:${e.port}'],
+        ['kalinka.local:8000'],
+      );
+      expect(store.serverIdAt(address), 'box-1');
+    });
+
+    test('a server without an id answering keeps the record, but the one '
+        'recorded is not followed from the address', () async {
+      final container = await answered(null, stored: {_knownKey: 'box-1'});
 
       expect(container.read(sharedPrefsProvider).getString(_knownKey), 'box-1');
+      final store = container.read(serverEndpointStoreProvider);
+      expect(store.endpointsOf('box-1'), isEmpty);
+      expect(store.serverIdAt(address), isNull);
     });
 
     test('a server not connected leaves the record alone', () async {
       final container = await _container(
         box: null,
         stored: {_knownKey: 'box-1'},
+        overrides: [
+          connectionStateProvider.overrideWith(
+            () => _Connection(ConnectionStatus.reconnecting),
+          ),
+        ],
       );
 
       container.read(rememberServerIdentityProvider);
-      await container.read(serverIdentityProvider.future);
       await Future<void>.delayed(Duration.zero);
 
       expect(container.read(sharedPrefsProvider).getString(_knownKey), 'box-1');
+      expect(
+        container.read(serverEndpointStoreProvider).serverIdAt(address),
+        'box-1',
+      );
     });
   });
 

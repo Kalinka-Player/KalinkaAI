@@ -312,7 +312,7 @@ class PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
         setState(() => _restartOverlayOpen = true);
       }
     });
-    ref.listen(connectionSettingsProvider.select((s) => (s.host, s.port)), (
+    ref.listen(connectionSettingsProvider.select((s) => s.serverChoice), (
       _,
       next,
     ) {

@@ -811,6 +811,28 @@ void main() {
 
       expect(container.read(settingsProvider).secretsSet, isEmpty);
     });
+
+    test('a staged change stays with the server at another of its addresses, '
+        'and not with another server', () async {
+      final container = ProviderContainer(
+        overrides: [
+          sharedPrefsProvider.overrideWithValue(_prefs),
+          kalinkaProxyProvider.overrideWithValue(_Api()),
+        ],
+      );
+      addTearDown(container.dispose);
+      final connection = container.read(connectionSettingsProvider.notifier);
+      connection.setDeviceEphemeral('Living room', '10.0.0.3', 8000);
+      final notifier = container.read(settingsProvider.notifier);
+      await notifier.loadConfig();
+      notifier.stageChange(_path, <Map<String, dynamic>>[]);
+
+      await connection.moveTo('10.0.0.4', 8000);
+      expect(container.read(settingsProvider).stagedChanges, contains(_path));
+
+      connection.setDeviceEphemeral('Kitchen', '10.0.0.9', 8000);
+      expect(container.read(settingsProvider).stagedChanges, isEmpty);
+    });
   });
 }
 

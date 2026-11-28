@@ -3098,6 +3098,30 @@ void main() {
     },
   );
 
+  testWidgets('the same server at another of its addresses keeps its tab', (
+    tester,
+  ) async {
+    final container = await _container(
+      _Proxy({'enabled': true, 'catalog_browsing': true}),
+      _CatalogApi(_catalog()),
+      settings: _serverSettings(details: true),
+      box: FakeBox(),
+    );
+    await container
+        .read(connectionSettingsProvider.notifier)
+        .setDevice('RPi 4B', '192.168.1.42', 8000);
+    await _screen(tester, container, size: const Size(400, 700));
+    await _tapTab(tester, PluginTab.server);
+    expect(find.text('http://192.168.1.42:8000').hitTestable(), findsOneWidget);
+
+    await container
+        .read(connectionSettingsProvider.notifier)
+        .moveTo('192.168.1.43', 8000);
+    await tester.pumpAndSettle();
+    expect(find.text('http://192.168.1.43:8000').hitTestable(), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('switching to a server without the catalog revokes browsing', (
     tester,
   ) async {

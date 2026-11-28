@@ -66,7 +66,7 @@ class RestartNotifier extends Notifier<RestartState> {
   @override
   RestartState build() {
     ref.watch(
-      connectionSettingsProvider.select((settings) => settings.address),
+      connectionSettingsProvider.select((settings) => settings.serverChoice),
     );
     ref.onDispose(() {
       _generation++;

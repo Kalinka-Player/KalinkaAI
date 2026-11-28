@@ -3,9 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'connection_settings_provider.dart';
 import 'connection_state_provider.dart';
 import 'demo_mode.dart';
+import 'discovery_types.dart' show DiscoveredServer;
 import 'kalinka_player_api_provider.dart';
 import 'pinned_server.dart';
 import 'server_address.dart';
+import 'server_endpoints.dart';
 import 'settings_provider.dart';
 
 /// Asks the server at an address whether it is a read-only demo, without
@@ -42,12 +44,15 @@ class NotADemoServerException implements Exception {
 /// lasts this session only, as the setup wizard wants until it commits. On
 /// failure the reconnect loop takes over and the error is rethrown. The demo
 /// address is connected to only once it says it is a demo; until then
-/// nothing about the connection changes.
+/// nothing about the connection changes. [found] is the server as discovery
+/// listed it: the app can follow it to its other addresses once it says at
+/// [address] that it is that server.
 Future<void> connectToServer(
   WidgetRef ref, {
   required String name,
   required ServerAddress address,
   required bool persist,
+  DiscoveredServer? found,
 }) async {
   if (!ref.read(canSelectServerProvider) &&
       address != ref.read(connectionSettingsProvider).address) {
@@ -55,6 +60,19 @@ Future<void> connectToServer(
   }
   if (address == demoServer() && !await ref.read(demoCheckProvider)(address)) {
     throw const NotADemoServerException();
+  }
+  final serverId = found?.serverId;
+  if (serverId != null && serverId.isNotEmpty) {
+    ref
+        .read(serverEndpointStoreProvider)
+        .chose(
+          serverId,
+          at: address,
+          addresses: [
+            for (final endpoint in found!.endpoints)
+              (scheme: 'http', host: endpoint.host, port: endpoint.port),
+          ],
+        );
   }
   final settings = ref.read(connectionSettingsProvider.notifier);
   final connection = ref.read(connectionStateProvider.notifier);
