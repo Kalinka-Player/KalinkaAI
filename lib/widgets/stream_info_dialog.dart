@@ -79,8 +79,8 @@ List<StreamInfoField> streamInfoFields(
         label: 'Path',
         value: bitPerfect
             ? 'Bit-perfect'
-            : output.signalPath != null
-            ? 'Processed'
+            : output.signalPath?.steps.any((step) => !step.bitPerfect) ?? false
+            ? 'Altered'
             : 'Not established',
       ),
     if (state.streamUrl != null) (label: 'URL', value: state.streamUrl!),

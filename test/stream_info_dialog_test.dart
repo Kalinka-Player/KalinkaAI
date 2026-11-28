@@ -235,7 +235,7 @@ void main() {
       expect(_valueOf(fields, 'Path'), 'Not established');
     });
 
-    test('a path the renderer says it processed is reported so', () {
+    test('a path the renderer says it altered is reported so', () {
       final fields = streamInfoFields(
         _converted(),
         positionMs: 0,
@@ -243,7 +243,7 @@ void main() {
         bitPerfect: false,
       );
 
-      expect(_valueOf(fields, 'Path'), 'Processed');
+      expect(_valueOf(fields, 'Path'), 'Altered');
     });
 
     test('no output device to judge is no verdict at all', () {
@@ -451,6 +451,73 @@ void main() {
         'Output',
       ]);
       expect(stages[2].detail, 'to 96k');
+    });
+    test('each step carries its mark, and the endpoints none', () {
+      final state = _playing()
+        ..audioInfo!.output = OutputInfo.fromJson({
+          'sample_format': 'PCM32_LE',
+          'sample_rate': 44100,
+          'signal_path': {
+            'steps': [
+              {
+                'kind': 'zero_padding',
+                'name': 'Zero-padding',
+                'bit_perfect': true,
+              },
+              {'kind': 'peq', 'name': 'Parametric EQ'},
+            ],
+          },
+        });
+
+      final stages = signalStages(state, DeviceVolume.empty);
+      expect(
+        {for (final s in stages) s.label: s.bitPerfect},
+        {
+          'Source': null,
+          'Decoded stream': null,
+          'Zero-padding': true,
+          'Parametric EQ': false,
+          'Output': null,
+        },
+      );
+    });
+    test('the renderer\'s volume step follows the slider', () {
+      final state = _playing()
+        ..audioInfo!.output = OutputInfo.fromJson({
+          'sample_rate': 44100,
+          'signal_path': {
+            'steps': [
+              {
+                'kind': 'volume',
+                'name': 'Software volume',
+                'summary': 'At full: samples untouched',
+                'bit_perfect': true,
+              },
+            ],
+          },
+        });
+      DeviceVolume volume(int level) => DeviceVolume(
+        currentVolume: level,
+        maxVolume: 100,
+        volumeGain: 0,
+        supported: true,
+        backend: VolumeBackend.software,
+      );
+      final lowered = signalStages(state, volume(40));
+      expect(
+        lowered
+            .where((s) => s.label == 'Software volume')
+            .map((s) => (s.detail, s.bitPerfect)),
+        [('40 / 100', false)],
+        reason: 'one step, the app\'s own not added beside it',
+      );
+      expect(
+        signalStages(
+          state,
+          volume(100),
+        ).firstWhere((s) => s.kind == 'volume').bitPerfect,
+        isTrue,
+      );
     });
     test('software gain appears only below unity', () {
       final state = _playing()

@@ -126,9 +126,15 @@ RendererConfigSnapshot _snapshot([String body = _configPayload]) =>
       Map<String, dynamic>.from(jsonDecode(body) as Map),
     );
 
-String _firPayload({String value = 'off', String cost = 'instant'}) =>
+String _firPayload({
+  String value = 'off',
+  String cost = 'instant',
+  bool direct = false,
+}) =>
     '''
 {"sections":[{"path":"output","title":"Output","fields":[
+  {"path":"output.direct_mode","title":"Direct output","type":"bool",
+   "value":"$direct","apply":"interrupts_playback"},
   {"path":"output.rew_fir_profile","title":"REW FIR filter","type":"enum",
    "description":"Applies the selected impulse at its sample rate.","value":"$value","apply":"$cost","options":[
      {"value":"off","label":"Off"},{"value":"test.wav","label":"Test filter"}]},
@@ -1587,6 +1593,18 @@ void main() {
         expect(find.byType(LinearProgressIndicator), findsNothing);
       },
     );
+
+    testWidgets('direct output leaves Room EQ shut and says why', (
+      tester,
+    ) async {
+      final api = _FakeApi(payload: _firPayload(direct: true));
+      await tester.pumpWidget(wrap(api));
+      await tester.pumpAndSettle();
+      expect(find.text('Off while Direct output is on'), findsOneWidget);
+      await tester.tap(find.text('Room EQ'));
+      await tester.pumpAndSettle();
+      expect(find.text('FIR Convolution'), findsNothing);
+    });
 
     testWidgets('demo mode blocks live FIR writes', (tester) async {
       final api = _FakeApi(payload: _firPayload());

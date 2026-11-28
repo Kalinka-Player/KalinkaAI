@@ -4,11 +4,15 @@ import '../data_model/data_model.dart';
 import '../theme/app_theme.dart';
 import '../utils/playback_utils.dart';
 
+/// One row of the path. [bitPerfect] marks a step 1:1 when it keeps every
+/// bit and Altered when it does not; null for the rows that are no step:
+/// the source, the decoded stream and the output.
 typedef SignalStage = ({
   String kind,
   String label,
   String detail,
   IconData icon,
+  bool? bitPerfect,
 });
 
 String _rate(int hz, int unit) {
@@ -44,11 +48,17 @@ String _pcm(int hz, int bits, int channels) => _details([
 /// rate change between the decoded stream and the output happened past the
 /// renderer's DSP, in ALSA or a sound server.
 const _rateKeepingSteps = {
+  'channels',
+  'float',
   'fir',
   'peq',
   'preamp',
   'dsd_gain',
+  'volume',
   'dither',
+  'integer',
+  'zero_padding',
+  'repack',
 };
 
 // Accept only identified PCM formats. A PCM-width carrier may contain DoP.
@@ -82,6 +92,10 @@ List<SignalStage> signalStages(
   final dop = outputFormat.startsWith('DoP_');
   final pcmOutput = _isPcm(outputFormat);
   final steps = out?.signalPath?.steps;
+  final software = volume.backend == VolumeBackend.software;
+  final level = software && volume.maxVolume > 0
+      ? '${volume.currentVolume} / ${volume.maxVolume}'
+      : '';
   // A step of any other kind may resample, and the renderer then says so.
   final stepsMayResample =
       steps != null &&
@@ -111,6 +125,7 @@ List<SignalStage> signalStages(
         label: 'Source',
         detail: origin,
         icon: Icons.library_music_outlined,
+        bitPerfect: null,
       ),
     if (decoded.isNotEmpty)
       (
@@ -118,6 +133,7 @@ List<SignalStage> signalStages(
         label: 'Decoded stream',
         detail: decoded,
         icon: Icons.graphic_eq,
+        bitPerfect: null,
       ),
     if (steps != null)
       for (final step in steps)
@@ -128,14 +144,26 @@ List<SignalStage> signalStages(
             (_, '') => step.kind,
             _ => step.name,
           },
-          detail: step.summary,
+          detail: step.kind == 'volume' && level.isNotEmpty
+              ? level
+              : step.summary,
           icon: switch (step.kind) {
             'fir' => Icons.waves_rounded,
             'peq' => Icons.equalizer_rounded,
             'preamp' => Icons.volume_up_outlined,
+            'volume' => Icons.volume_down_outlined,
             'dither' => Icons.grain_rounded,
+            'channels' => Icons.call_split_rounded,
+            'float' ||
+            'integer' ||
+            'zero_padding' ||
+            'repack' => Icons.swap_horiz,
             _ => Icons.tune,
           },
+          // The slider moves ahead of the restated path.
+          bitPerfect: step.kind == 'volume' && software
+              ? volume.currentVolume >= volume.maxVolume
+              : step.bitPerfect,
         ),
     if (native)
       (
@@ -143,6 +171,7 @@ List<SignalStage> signalStages(
         label: 'Native DSD',
         detail: outputFormat,
         icon: Icons.swap_horiz,
+        bitPerfect: true,
       ),
     if (out != null && dop)
       (
@@ -153,6 +182,7 @@ List<SignalStage> signalStages(
           out.sampleFormat,
         ]),
         icon: Icons.swap_horiz,
+        bitPerfect: true,
       ),
     if (steps == null && out != null && dsd && pcmOutput)
       (
@@ -160,6 +190,7 @@ List<SignalStage> signalStages(
         label: 'DSD to PCM',
         detail: _pcm(out.sampleRate, out.bitsPerSample, out.channels),
         icon: Icons.tune,
+        bitPerfect: false,
       ),
     if (!stepsMayResample &&
         audio != null &&
@@ -175,16 +206,20 @@ List<SignalStage> signalStages(
         detail:
             '${_rate(audio.sampleRate, 1000)} → ${_rate(out.sampleRate, 1000)} kHz',
         icon: Icons.tune,
+        bitPerfect: false,
       ),
+    // A renderer older than the trace leaves its software volume to the app.
     if (out != null &&
-        volume.backend == VolumeBackend.software &&
+        software &&
+        !(steps?.any((step) => step.kind == 'volume') ?? false) &&
         volume.maxVolume > 0 &&
         volume.currentVolume < volume.maxVolume)
       (
         kind: 'software_volume',
         label: 'Software volume',
-        detail: '${volume.currentVolume} / ${volume.maxVolume}',
+        detail: level,
         icon: Icons.volume_down_outlined,
+        bitPerfect: false,
       ),
     if (out != null)
       (
@@ -192,6 +227,7 @@ List<SignalStage> signalStages(
         label: 'Output',
         detail: destination.isEmpty ? 'Format unavailable' : destination,
         icon: Icons.speaker_outlined,
+        bitPerfect: null,
       ),
   ];
 }
@@ -239,9 +275,20 @@ class AudioSignalPath extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          stages[i].label,
-                          style: KalinkaTextStyles.trayRowLabel,
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                stages[i].label,
+                                style: KalinkaTextStyles.trayRowLabel,
+                              ),
+                            ),
+                            if (stages[i].bitPerfect case final kept?)
+                              Padding(
+                                padding: const EdgeInsets.only(left: 8),
+                                child: StepMark(bitPerfect: kept),
+                              ),
+                          ],
                         ),
                         if (stages[i].detail.isNotEmpty)
                           Text(
@@ -257,5 +304,31 @@ class AudioSignalPath extends StatelessWidget {
           ),
         ),
     ],
+  );
+}
+
+/// What a screen reader says for a step's mark.
+String stepMarkLabel(bool bitPerfect) =>
+    bitPerfect ? 'Keeps every bit' : 'Alters the samples';
+
+/// 1:1 for a step that keeps every bit; ≈ Altered for one that changes the
+/// samples, which is often a choice and so reads as information, not a fault.
+class StepMark extends StatelessWidget {
+  final bool bitPerfect;
+
+  const StepMark({super.key, required this.bitPerfect});
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    label: stepMarkLabel(bitPerfect),
+    excludeSemantics: true,
+    child: Text(
+      bitPerfect ? '1:1' : '≈ Altered',
+      style: KalinkaTextStyles.bitPerfectBadge.copyWith(
+        color: bitPerfect
+            ? KalinkaColors.textSecondary
+            : KalinkaColors.signalAltered,
+      ),
+    ),
   );
 }

@@ -138,15 +138,23 @@ class _Stage extends StatelessWidget {
           ? CrossAxisAlignment.start
           : CrossAxisAlignment.center,
       children: [
-        Text(
-          stage.label,
-          style: onTap == null
-              ? KalinkaTextStyles.trayRowLabel
-              : KalinkaTextStyles.trayRowLabel.copyWith(
-                  decoration: TextDecoration.underline,
-                  decorationColor: KalinkaColors.textMuted,
-                ),
-          textAlign: align,
+        Wrap(
+          alignment: linear ? WrapAlignment.start : WrapAlignment.center,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: 8,
+          children: [
+            Text(
+              stage.label,
+              style: onTap == null
+                  ? KalinkaTextStyles.trayRowLabel
+                  : KalinkaTextStyles.trayRowLabel.copyWith(
+                      decoration: TextDecoration.underline,
+                      decorationColor: KalinkaColors.textMuted,
+                    ),
+              textAlign: align,
+            ),
+            if (stage.bitPerfect case final kept?) StepMark(bitPerfect: kept),
+          ],
         ),
         if (stage.detail.isNotEmpty) ...[
           const SizedBox(height: 2),
@@ -177,6 +185,7 @@ class _Stage extends StatelessWidget {
       label: [
         stage.label,
         if (stage.detail.isNotEmpty) stage.detail,
+        if (stage.bitPerfect case final kept?) stepMarkLabel(kept),
       ].join(', '),
       button: onTap == null ? null : true,
       onTap: onTap,
