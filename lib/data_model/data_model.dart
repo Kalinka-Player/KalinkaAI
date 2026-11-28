@@ -66,23 +66,35 @@ class SignalStep {
   /// How the step is set, as display text: "DSD64 to 176.4 kHz".
   final String summary;
 
-  const SignalStep({required this.kind, this.name = '', this.summary = ''});
+  /// Every sample leaves the step with the value it came in with, at most
+  /// zero-padded; false for every step from a renderer older than the mark.
+  final bool bitPerfect;
+
+  const SignalStep({
+    required this.kind,
+    this.name = '',
+    this.summary = '',
+    this.bitPerfect = false,
+  });
 
   factory SignalStep.fromJson(Map<String, dynamic> json) => SignalStep(
     kind: json["kind"] ?? '',
     name: json["name"] ?? '',
     summary: json["summary"] ?? '',
+    bitPerfect: json["bit_perfect"] == true,
   );
 
   Map<String, dynamic> toJson() => {
     "kind": kind,
     "name": name,
     "summary": summary,
+    "bit_perfect": bitPerfect,
   };
 }
 
-/// What the renderer does to the decoded samples before the device, in order.
-/// The volume is not part of it: [DeviceVolume] reports that.
+/// What the renderer does to the decoded samples before the device, in order:
+/// every format change, its processing and a software volume. A volume the
+/// device applies is not part of it: [DeviceVolume] reports that.
 class SignalPath {
   final List<SignalStep> steps;
 
@@ -92,7 +104,7 @@ class SignalPath {
   const SignalPath({required this.steps, this.latencyMs = 0});
 
   /// Null for anything but a path with steps: a server sends none when the
-  /// samples reach the device as decoded.
+  /// renderer did nothing at all to the samples.
   static SignalPath? maybeFromJson(Object? json) {
     if (json is! Map) return null;
     final steps = [
@@ -120,12 +132,12 @@ class OutputInfo {
   final int channels;
   final DeviceAccess access;
 
-  /// Whether the decoded samples reach the device unaltered. Only half of
-  /// bit-perfection: the volume is reported with the device that applies it.
+  /// Whether the decoded samples reach the device bit for bit. Only half of
+  /// bit-perfection: a volume the device applies is reported with it.
   final bool losslessPath;
 
-  /// How the renderer altered the decoded samples, when it did; null on an
-  /// older server and whenever nothing but the volume touches them.
+  /// What the renderer did to the decoded samples, step by step; null on an
+  /// older server and whenever it did nothing at all.
   final SignalPath? signalPath;
 
   const OutputInfo({

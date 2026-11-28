@@ -922,11 +922,13 @@ class SignalStep extends $pb.GeneratedMessage {
     $core.String? kind,
     $core.String? name,
     $core.String? summary,
+    $core.bool? bitPerfect,
   }) {
     final result = create();
     if (kind != null) result.kind = kind;
     if (name != null) result.name = name;
     if (summary != null) result.summary = summary;
+    if (bitPerfect != null) result.bitPerfect = bitPerfect;
     return result;
   }
 
@@ -947,6 +949,7 @@ class SignalStep extends $pb.GeneratedMessage {
     ..aOS(1, _omitFieldNames ? '' : 'kind')
     ..aOS(2, _omitFieldNames ? '' : 'name')
     ..aOS(3, _omitFieldNames ? '' : 'summary')
+    ..aOB(4, _omitFieldNames ? '' : 'bitPerfect')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -996,10 +999,24 @@ class SignalStep extends $pb.GeneratedMessage {
   $core.bool hasSummary() => $_has(2);
   @$pb.TagNumber(3)
   void clearSummary() => $_clearField(3);
+
+  /// Every sample leaves the step with the value it came in with, at most
+  /// zero-padded into a wider integer container. Unset means it alters them,
+  /// as every step from a renderer older than the field does.
+  @$pb.TagNumber(4)
+  $core.bool get bitPerfect => $_getBF(3);
+  @$pb.TagNumber(4)
+  set bitPerfect($core.bool value) => $_setBool(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasBitPerfect() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearBitPerfect() => $_clearField(4);
 }
 
 /// What the renderer does to the samples between the decoder and the device, in
-/// order. The volume is not a step of it: VolumeState reports that.
+/// order: every format change and every computation, the software volume
+/// included. A path whose steps are all bit_perfect reaches the device as
+/// decoded.
 class SignalPath extends $pb.GeneratedMessage {
   factory SignalPath({
     $core.Iterable<SignalStep>? steps,

@@ -68,6 +68,34 @@ void main() {
       expect(isBitPerfect(processed, _volume(VolumeBackend.hardware)), isFalse);
     });
 
+    test('a path whose every step keeps the bits is still bit-perfect', () {
+      const padded = OutputInfo(
+        access: DeviceAccess.exclusive,
+        losslessPath: true,
+        signalPath: SignalPath(
+          steps: [
+            SignalStep(kind: 'float', bitPerfect: true),
+            SignalStep(kind: 'integer', bitPerfect: true),
+          ],
+        ),
+      );
+      expect(isBitPerfect(padded, _volume(VolumeBackend.hardware)), isTrue);
+    });
+
+    test('one step that alters the samples is enough', () {
+      const altered = OutputInfo(
+        access: DeviceAccess.exclusive,
+        losslessPath: true,
+        signalPath: SignalPath(
+          steps: [
+            SignalStep(kind: 'zero_padding', bitPerfect: true),
+            SignalStep(kind: 'peq'),
+          ],
+        ),
+      );
+      expect(isBitPerfect(altered, _volume(VolumeBackend.hardware)), isFalse);
+    });
+
     test('a renderer that reports no device claims nothing', () {
       expect(isBitPerfect(null, _volume(VolumeBackend.hardware)), isFalse);
     });

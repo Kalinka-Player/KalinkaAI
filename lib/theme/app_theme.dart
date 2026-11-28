@@ -291,6 +291,14 @@ class KalinkaColors {
     0xFF5FB07E,
   ); // Use for text/icons on statusOnlineSurface only
 
+  // ── Semantic — Signal path ──────────────────────────────────────────────
+  // A step that alters the samples is often a choice (EQ, room correction),
+  // so it reads as information, not as a fault.
+
+  static const signalAltered = Color(
+    0xFF8EC5E8,
+  ); // Light blue · ≈ Altered mark on a signal path step
+
   // ── Semantic — Actions ──────────────────────────────────────────────────
   // Destructive and confirmatory actions. Separate from status colours
   // because they appear in interactive controls (buttons, swipe actions)

@@ -128,6 +128,8 @@ class _RendererSettingsDashboardState
         .toList();
     final hasPeq = state.values.containsKey('dsp.profile');
     final hasFir = state.values.containsKey(firPath);
+    // The renderer then keeps every sample out of room EQ's reach.
+    final direct = state.values['output.direct_mode'] == true;
     final extra = state.sections.where(
       (s) => switch (s.id) {
         'renderer' => (nameFields ?? []).any((f) => f != nameField),
@@ -262,9 +264,11 @@ class _RendererSettingsDashboardState
                       label: 'Room EQ',
                       leading: Icons.equalizer_rounded,
                       sublabel: [
-                        if (state.values['dsp.bypass'] == true) 'DSP bypassed',
+                        if (direct) 'Off while Direct output is on',
+                        if (!direct && state.values['dsp.bypass'] == true)
+                          'DSP bypassed',
                         if (!hasPeq && !hasFir && state.hasHeadroom) 'Headroom',
-                        if (hasPeq)
+                        if (!direct && hasPeq)
                           switch ((
                             state.values['dsp.bypass'],
                             state.values['dsp.enabled'],
@@ -274,13 +278,13 @@ class _RendererSettingsDashboardState
                             (_, false) => 'Parametric EQ off',
                             _ => 'Parametric EQ',
                           },
-                        if (hasFir)
+                        if (!direct && hasFir)
                           switch (widget.optionLabel(firPath)) {
                             final name? => 'FIR · $name',
                             null => 'FIR convolution',
                           },
                       ].join('  ·  '),
-                      onTap: () => widget.onRoomEq(null),
+                      onTap: direct ? null : () => widget.onRoomEq(null),
                     ),
                   ],
                 ),
@@ -558,12 +562,14 @@ class _DashboardLayout extends ConsumerWidget {
             _ => 'Waiting for track details',
           },
           icon: Icons.library_music_outlined,
+          bitPerfect: null,
         ),
         (
           kind: 'output',
           label: 'Configured output',
           detail: configuredOutput ?? info.friendlyName,
           icon: Icons.speaker_outlined,
+          bitPerfect: null,
         ),
       ];
     }
